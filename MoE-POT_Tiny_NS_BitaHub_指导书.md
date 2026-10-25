@@ -246,7 +246,7 @@ scp -P <开发机端口> moepot_bita_code.zip root@<开发机地址>:/code/
 第 3 步回到 JupyterLab Terminal 解压覆盖：
 
 ```bash
-unzip -o /code/moepot_bita_code.zip -d /code/MoEPOT
+unzip -o /code/moepot_bita_code.zip -d /code
 cd /code/MoEPOT
 ls setup_env.sh run_moepot.sh run_all_ft200.sh monitor.sh
 ```

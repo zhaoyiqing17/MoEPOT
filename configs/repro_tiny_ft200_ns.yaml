@@ -27,13 +27,13 @@ n_blocks: 4
 mlp_ratio: 1
 width: 512
 
-# The run script passes this path explicitly so both datasets start from the
-# same pretrained checkpoint. It can be overridden on BitaHub if required.
+# run_moepot.sh passes this path explicitly so both datasets start from the
+# same public pretrained checkpoint.
 resume_path: /model/nestor_moepot_tiny/model_moepot_tiny.pth
 
-# The two rows are documentation for the two independent FT200 runs. The run
-# script executes them sequentially on a single 4090 instead of relying on
-# trainer.py's GPU discovery, which rejects cards with more than 800 MB in use.
+# Documentation for the two independent FT200 runs. run_all_ft200.sh executes
+# them sequentially on the same 4090 and validates the first run before the
+# second starts.
 recipes:
   ns1e-5:
     dataset_id: ns2d_fno_1e-5
