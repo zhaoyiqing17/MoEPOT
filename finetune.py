@@ -77,6 +77,8 @@ parser.add_argument('--use_writer', action='store_true',default= False) # 记录
 
 parser.add_argument('--res', type=int, default=128)
 parser.add_argument('--noise_scale',type=float, default=0)  # finetune时，噪声为0
+parser.add_argument('--smoke_epochs', type=int, default=0,
+                    help='Run only this many epochs while keeping the scheduled LR horizon; 0 disables smoke mode')
 
 ### shared params 
 parser.add_argument('--width', type=int, default=512)    # width
@@ -125,6 +127,9 @@ parser.add_argument('--moe_loss_weight',type=float,default=0.1)
 parser.add_argument('--is_finetune',action='store_true',default=True)  # in finetune stage
 
 args = parser.parse_args()
+if args.smoke_epochs < 0:
+    parser.error('--smoke_epochs must be non-negative')
+run_epochs = args.smoke_epochs if args.smoke_epochs > 0 else args.epochs
 
 
 device = torch.device("cuda:{}".format(args.gpu))
@@ -215,7 +220,13 @@ else:
     raise NotImplementedError
 
 comment = args.comment + '_{}_{}'.format(len(train_paths), ntrain)
-log_path = './logs/' + time.strftime('%m%d_%H_%M_%S') + comment if len(args.log_path)==0  else os.path.join('./logs',args.log_path + comment)
+if len(args.log_path) == 0:
+    log_path = './logs/' + time.strftime('%m%d_%H_%M_%S') + comment
+elif os.path.isabs(args.log_path):
+    log_path = args.log_path
+else:
+    log_path = os.path.join('./logs', args.log_path + comment)
+os.makedirs(log_path, exist_ok=True)
 model_path = log_path + '/model.pth'  # Save the model path in the logs folder
 if args.use_writer:
     writer = SummaryWriter(log_dir=log_path)
@@ -226,6 +237,7 @@ if args.use_writer:
 else:
     writer = None
 print("is_finetune:",args.is_finetune)
+print("scheduled_epochs:", args.epochs, "run_epochs:", run_epochs)
 print(model)
 count_parameters(model)
 
@@ -234,7 +246,7 @@ count_parameters(model)
 ################################################################
 myloss = SimpleLpLoss(size_average=False)
 iter = 0
-for ep in range(args.epochs):
+for ep in range(run_epochs):
     model.train()
     freeze_all_moe_gating_and_feature(model)
     
