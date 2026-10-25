@@ -13,10 +13,13 @@
 
 本实验固定作者仓库提交 `c36ec22aa492b9460d2e9f24cf4f0354d0f07540`，使用独立分支 `repro/tiny-ns-ft200`。不改模型结构或训练公式。
 
-## 参数与资源
+## 参数
 
 | 项目 | 值 |
 |---|---|
+| 数据集 | NS 1e-5、NS 1e-3 |
+| 数据格式 | HDF5，键 `data`，规范 shape `(N,64,64,T)` |
+| 数据规模 | 1e-3 原始约 4.1GB，裁剪后两套合计小于 2GB |
 | 模型 | MoE-POT-Tiny，总计约 30M，激活约 17M |
 | checkpoint | `model_moepot_tiny.pth` |
 | 共享环境 | `/data/nestor_env/envs/nestor` |
@@ -301,26 +304,7 @@ grep '^epoch' "$RUN_DIR/logs.txt" | tail -n 5
 
 冒烟脚本仍按 200 epoch 构造 OneCycle，因此学习率轨迹与正式训练一致，只是实际执行 5 个 epoch。验收：每个 run 有 5 条 epoch 记录，测试 L2RE 是有限数，`model.pth` 可加载。冒烟结果不能作为论文结果。
 
-### 10. 估算正式训练时间与费用
-
-从 BitaHub 实例页面记录当前 1 卡 RTX 4090 的小时单价，然后执行：
-
-```bash
-python scripts/estimate_runtime.py \
-  --runs-root /data/nestor_moepot_ns/runs \
-  --gpu-price 页面显示的每小时单价
-```
-
-结果写入 `/data/nestor_moepot_ns/runs/summary/runtime_estimate.json`。每个数据集预计耗时：
-
-```text
-FT200 小时数 = 5-epoch 平均单 epoch 秒数 × 200 / 3600
-预计费用 = FT200 小时数 × BitaHub 当前 GPU 单价
-```
-
-这里的单 epoch 时间包含仓库每轮执行的测试评估。正式训练开始后可用实际 epoch 时间更新估算。
-
-### 11. 正式训练 FT200
+### 10. 正式训练 FT200
 
 先启动 NS 1e-5：
 
@@ -350,7 +334,7 @@ grep '^epoch 199' "$RUN_DIR/logs.txt"
 
 两组训练必须分别从预训练 checkpoint 开始，不能把 NS 1e-5 的 FT200 权重作为 NS 1e-3 的起点。
 
-### 12. 汇总结果
+### 11. 汇总结果
 
 ```bash
 cd /code/MoEPOT
@@ -370,7 +354,48 @@ runs/summary/runtime_estimate.json
 
 报告同时显示原始 L2RE、论文值、相对偏差和预警。`pending` 表示对应正式训练尚未完成或日志缺失。
 
-## 最终验收
+## 正式训练预计用时
+
+当前尚未获得云端实测值，因此先使用“单 epoch 10 秒”作为示意假设。这个假设按当前代码口径包含训练和该 epoch 的测试评估；本仓库不是模板示例中的每 5 epoch 测试一次，而是每个 epoch 都测试。
+
+| 项目 | 示意估算 |
+|---|---:|
+| 单 epoch 假设 | 10 秒 |
+| 单个数据集 FT200 | `10 × 200 / 3600 = 0.556` 小时 |
+| 两组 FT200 合计 | 约 1.11 小时 |
+| 预计费用 | `1.11 × BitaHub 页面当前 GPU 单价` |
+
+以上仅是未冒烟前的示意值，不代表真实性能，费用必须以 BitaHub 页面显示为准。完成两组 5-epoch 冒烟后执行：
+
+```bash
+cd /code/MoEPOT
+python scripts/estimate_runtime.py \
+  --runs-root /data/nestor_moepot_ns/runs \
+  --gpu-price 页面显示的每小时单价
+```
+
+脚本把估算写入 `/data/nestor_moepot_ns/runs/summary/runtime_estimate.json`，使用：
+
+```text
+单个数据集 FT200 小时数 = 5-epoch 平均单 epoch 秒数 × 200 / 3600
+预计费用 = 两个数据集 FT200 小时数之和 × BitaHub 当前 GPU 单价
+```
+
+正式训练开始后可用实际 epoch 时间再次更新估算。
+
+## 环境复用
+
+MoE-POT 不是 NESTOR，因此使用为它生成的等价共享环境脚本，不套用 NESTOR starter：
+
+```bash
+export ENV_DIR=/data/nestor_env/envs/nestor
+bash /code/MoEPOT/scripts/setup_env_moepot.sh
+export PATH="$ENV_DIR/bin:$PATH"
+```
+
+环境安装一次后，后续开发机和训练终端只需重新设置 `ENV_DIR`、`PATH`，不需要重复安装 PyTorch。
+
+## 验收标准
 
 - 四个 HDF5 文件的 shape 分别为 `(1000/200,64,64,20)` 和 `(1000/200,64,64,50)`，且没有 NaN/Inf。
 - Tiny checkpoint 的 SHA256 已记录，全部模型键成功加载。
@@ -378,6 +403,21 @@ runs/summary/runtime_estimate.json
 - 两套 5-epoch 冒烟均有 5 条完整 epoch 日志和可加载 checkpoint。
 - 两组 FT200 都完成到 epoch 199，参考值为 0.0456 和 0.00493。
 - 最终模型、日志、指标和报告都在 `/data/nestor_moepot_ns/runs`。
+
+## 操作 Tips：查看云端文件
+
+```bash
+DATA_ROOT=/data/nestor_moepot_ns
+ls -lh /data/nestor_1e5
+ls -lh /model/nestor_moepot_tiny
+ls -lh "$DATA_ROOT/runs/zero_shot"
+ls -lh "$DATA_ROOT/runs/finetune/ns1e-5/full"
+ls -lh "$DATA_ROOT/runs/finetune/ns1e-3/full"
+cat "$DATA_ROOT/runs/summary/report.md"
+cat "$DATA_ROOT/runs/summary/runtime_estimate.json"
+tail -n 10 "$DATA_ROOT/runs/finetune/ns1e-5/full/logs.txt"
+tail -n 10 "$DATA_ROOT/runs/finetune/ns1e-3/full/logs.txt"
+```
 
 ## 常见问题
 
