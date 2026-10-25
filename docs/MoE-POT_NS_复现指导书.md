@@ -272,8 +272,12 @@ Access Tokens key：github_pat_填入完整Token
 
 ##### 1.6.2 Fine-grained Token 不可用时的 Classic Token
 
-如果 BitaHub 明确只支持 Classic Token，或者 Fine-grained Token 授权后仍返回
-`403`，回到：
+如果 BitaHub 明确提示“无法识别该 API key”或“无法识别 Access Tokens key”，
+而同一个 Fine-grained Token 通过 GitHub API 验证正常，这说明是 BitaHub 对
+`github_pat_...` 格式的兼容问题，不需要继续重复创建 Fine-grained Token。
+
+另外，如果 Fine-grained Token 授权后仍返回 `403`，也使用下面的 Classic Token
+方案。回到：
 
 ```text
 GitHub 右上角头像
@@ -289,14 +293,17 @@ GitHub 右上角头像
 ```text
 Note：bitahub-moepot-readonly
 Expiration：7 days
-Scopes：先不勾选任何权限
+Scopes：public_repo
 ```
 
-公开仓库不勾选 scope 时通常已经可以只读访问。如果 BitaHub 使用这个无 scope
-Token 仍返回 `401/403`，先撤销它，再生成一个仅勾选 `public_repo` 的兼容 Token。
-不要勾选 `repo`，更不要勾选 `admin:org`、`delete_repo`、`workflow` 等无关权限。
-生成的 Classic Token 通常以 `ghp_` 开头，同样将完整 Token 原样填入 BitaHub 的
-`Access Tokens key`。
+`public_repo` 是访问公开仓库所需的最小 Classic scope。不要勾选同时覆盖私有仓库的
+`repo`，更不要勾选 `admin:org`、`delete_repo`、`workflow` 等无关权限。
+生成的 Classic Token 通常以 `ghp_` 开头，将完整 Token 原样填入 BitaHub 的
+`Access Tokens key`，不要添加 `Bearer`、`token` 或引号。
+
+如果 BitaHub 在你已经改用 `ghp_...` Classic Token 后仍提示无法识别，应停止反复
+生成 Token，记录页面原始报错，并检查 BitaHub 的“授权仓库类型”是否确实选择了
+GitHub，而不是其他代码平台。
 
 ##### 1.6.3 在 BitaHub 之前先验证 Token
 
