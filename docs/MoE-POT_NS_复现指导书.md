@@ -306,33 +306,102 @@ grep '^epoch' "$RUN_DIR/logs.txt" | tail -n 5
 
 ### 10. 正式训练 FT200
 
-先启动 NS 1e-5：
+#### 10.1 启动 NS 1e-5
+
+在 BitaHub 开发机的 WebTerminal 中执行：
 
 ```bash
 cd /code/MoEPOT
 bash scripts/launch_nohup.sh finetune ns1e-5 full
-bash scripts/monitor_run.sh /data/nestor_moepot_ns/runs/finetune/ns1e-5/full --follow
 ```
 
-监控结束且进程显示 `STOPPED` 后验收：
+启动脚本会立即返回，并输出 PID。默认运行目录为：
+
+```bash
+export RUN_DIR=/data/nestor_moepot_ns/runs/finetune/ns1e-5/full
+```
+
+相关文件：
+
+```text
+"$RUN_DIR/pid"         后台进程 PID
+"$RUN_DIR/nohup.out"   启动信息及进程级错误
+"$RUN_DIR/logs.txt"    epoch、learning rate、训练/测试 L2RE
+```
+
+如果关闭浏览器或 WebTerminal，`nohup` 训练仍会继续。
+
+#### 10.2 实时查看 NS 1e-5 状态
+
+只查看一次当前状态：
+
+```bash
+bash scripts/monitor_run.sh "$RUN_DIR"
+```
+
+持续刷新进程、GPU 显存、GPU 利用率和最近 20 行日志：
+
+```bash
+bash scripts/monitor_run.sh "$RUN_DIR" --follow
+```
+
+该命令每 60 秒刷新一次。按 `Ctrl-C` 只退出监控界面，不会终止后台训练；需要再次查看时重新执行上面的命令即可。
+
+另开一个 WebTerminal，可只跟踪训练日志：
 
 ```bash
 RUN_DIR=/data/nestor_moepot_ns/runs/finetune/ns1e-5/full
-test -f "$RUN_DIR/model.pth"
-grep '^epoch 199' "$RUN_DIR/logs.txt"
+tail -F "$RUN_DIR/logs.txt"
 ```
 
-再启动 NS 1e-3：
+查看 PID、进程是否存活和 GPU：
+
+```bash
+RUN_DIR=/data/nestor_moepot_ns/runs/finetune/ns1e-5/full
+PID=$(cat "$RUN_DIR/pid")
+echo "pid=$PID"
+ps -p "$PID" -o pid,ppid,etime,%cpu,%mem,stat,cmd
+kill -0 "$PID" && echo "process is RUNNING" || echo "process is STOPPED"
+nvidia-smi
+```
+
+期望状态：
+
+```text
+process: RUNNING
+GPU utilization: 持续出现非零百分比
+logs.txt: 每完成一个 epoch 增加一行，epoch 从 0 递增
+```
+
+实时监控命令 `monitor_run.sh ... --follow` 在检测到 PID 不存在后显示 `run has stopped` 并自动退出。
+
+#### 10.3 NS 1e-5 完成验收
+
+进程停止后执行：
+
+```bash
+test -f "$RUN_DIR/model.pth"
+grep '^epoch 199' "$RUN_DIR/logs.txt"
+tail -n 20 "$RUN_DIR/logs.txt"
+```
+
+只有确认 epoch 199 已出现、`model.pth` 存在后，才启动第二个数据集：
 
 ```bash
 bash scripts/launch_nohup.sh finetune ns1e-3 full
-bash scripts/monitor_run.sh /data/nestor_moepot_ns/runs/finetune/ns1e-3/full --follow
 RUN_DIR=/data/nestor_moepot_ns/runs/finetune/ns1e-3/full
-test -f "$RUN_DIR/model.pth"
-grep '^epoch 199' "$RUN_DIR/logs.txt"
+bash scripts/monitor_run.sh "$RUN_DIR" --follow
 ```
 
-两组训练必须分别从预训练 checkpoint 开始，不能把 NS 1e-5 的 FT200 权重作为 NS 1e-3 的起点。
+NS 1e-3 完成后：
+
+```bash
+test -f "$RUN_DIR/model.pth"
+grep '^epoch 199' "$RUN_DIR/logs.txt"
+tail -n 20 "$RUN_DIR/logs.txt"
+```
+
+两个数据集共用一张 4090，必须串行执行。不要在前一个任务仍显示 `RUNNING` 时启动后一个任务。两次训练都必须从预训练 checkpoint 开始，不能把 NS 1e-5 的 FT200 权重作为 NS 1e-3 的起点。
 
 ### 11. 汇总结果
 
