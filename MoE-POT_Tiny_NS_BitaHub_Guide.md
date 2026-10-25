@@ -256,7 +256,7 @@ ls setup_env.sh run_moepot.sh run_all_ft200.sh monitor.sh
 ```bash
 test -f /code/MoEPOT/scripts/prepare_assets.py
 test -f /code/MoEPOT/scripts/download_tiny_checkpoint.py
-test -f /code/MoEPOT/MoE-POT_Tiny_NS_BitaHub_指导书.md
+test -f /code/MoEPOT/MoE-POT_Tiny_NS_BitaHub_Guide.md
 echo "CODE_OK"
 ```
 
