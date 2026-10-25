@@ -232,21 +232,169 @@ ls -ld /code /output /data /model
 
 #### 4.1. 方式 A：公开 fork
 
-如果你已经把本分支推送到公开 GitHub fork，执行：
+本方式要求“代码分支已经存在你自己的公开 GitHub fork 中”。只在本地有
+`repro/moepot-tiny-ns-bita-v2` 分支还不够；如果没有推送，开发机
+`git clone` 会成功，但 `git switch` 会提示 `invalid reference`。
+
+##### 4.1.1. 在本地确认分支
+
+在本地 Mac 打开 Terminal：
+
+```bash
+cd /Users/Admin/Desktop/AI4S/MoE-POT/MoEPOT
+
+git branch --show-current
+# 应输出：
+# repro/moepot-tiny-ns-bita-v2
+
+test -f setup_env.sh
+test -f run_moepot.sh
+echo "LOCAL_BRANCH_OK"
+```
+
+如果 `git branch --show-current` 不是复现分支，先停止推送，确认自己在正确的仓库和分支上。
+
+##### 4.1.2. 确认 GitHub fork 是公开仓库
+
+本次使用的 fork：
+
+```text
+https://github.com/zhaoyiqing17/MoEPOT
+```
+
+在浏览器打开该页面：
+
+1. 仓库标题旁应显示 `Public`。
+2. 点击绿色 `Code` 按钮。
+3. 选择 `HTTPS`。
+4. 复制以 `.git` 结尾的地址，应为：
+
+```text
+https://github.com/zhaoyiqing17/MoEPOT.git
+```
+
+如果显示 `Private`，开发机无法像公开仓库一样匿名 clone，应立即改用第 4.2 节代码包，或另行配置平台代码授权。
+
+##### 4.1.3. 在本地配置 fork 远端
+
+不要直接推送到作者仓库。先查看本地远端：
+
+```bash
+git remote -v
+```
+
+添加或修正你自己的远端名称 `userfork`：
+
+```bash
+if git remote get-url userfork >/dev/null 2>&1; then
+  git remote set-url userfork https://github.com/zhaoyiqing17/MoEPOT.git
+else
+  git remote add userfork https://github.com/zhaoyiqing17/MoEPOT.git
+fi
+
+git remote -v
+```
+
+此时应看到：
+
+```text
+userfork https://github.com/zhaoyiqing17/MoEPOT.git (fetch)
+userfork https://github.com/zhaoyiqing17/MoEPOT.git (push)
+```
+
+##### 4.1.4. 推送复现分支
+
+```bash
+git push -u userfork repro/moepot-tiny-ns-bita-v2
+```
+
+如果 GitHub 要求登录，使用 Git Credential Manager 或浏览器登录。不要把
+Token 直接写进远端 URL、命令历史或指南。
+
+推送成功后，本地会显示类似：
+
+```text
+* [new branch] repro/moepot-tiny-ns-bita-v2 -> repro/moepot-tiny-ns-bita-v2
+branch 'repro/moepot-tiny-ns-bita-v2' set up to track 'userfork/repro/moepot-tiny-ns-bita-v2'
+```
+
+##### 4.1.5. 验证远端分支已经存在
+
+```bash
+git ls-remote --heads userfork | grep repro/moepot-tiny-ns-bita-v2
+```
+
+必须看到一行类似：
+
+```text
+<40位提交哈希>  refs/heads/repro/moepot-tiny-ns-bita-v2
+```
+
+没有输出时，开发机一定无法切换该分支。继续查本地推送是否成功，不要先去开发机
+反复执行 `git switch`。
+
+##### 4.1.6. 在开发机 clone 并切换
+
+如果 `/code/MoEPOT` 不存在：
 
 ```bash
 cd /code
-git clone <YOUR_PUBLIC_FORK_URL> MoEPOT
+git clone https://github.com/zhaoyiqing17/MoEPOT.git
 cd /code/MoEPOT
-git switch repro/moepot-tiny-ns-bita-v2
 ```
 
-验收：
+如果 `/code/MoEPOT` 已经存在，直接在原目录更新：
 
 ```bash
-ls /code/MoEPOT/setup_env.sh /code/MoEPOT/run_moepot.sh
-ls /code/MoEPOT/configs/repro_tiny_ft200_ns.yaml
+cd /code/MoEPOT
+git remote set-url origin https://github.com/zhaoyiqing17/MoEPOT.git
+git fetch origin
 ```
+
+确认远端分支已经获取：
+
+```bash
+git branch -a
+```
+
+应看到：
+
+```text
+remotes/origin/main
+remotes/origin/repro/moepot-tiny-ns-bita-v2
+```
+
+第一次切换时创建本地跟踪分支：
+
+```bash
+git switch -c repro/moepot-tiny-ns-bita-v2 \
+  --track origin/repro/moepot-tiny-ns-bita-v2
+```
+
+如果本地分支已经存在，改用：
+
+```bash
+git switch repro/moepot-tiny-ns-bita-v2
+git pull --ff-only
+```
+
+##### 4.1.7. 验收
+
+```bash
+cd /code/MoEPOT
+git branch --show-current
+# repro/moepot-tiny-ns-bita-v2
+
+test -f setup_env.sh
+test -f run_moepot.sh
+test -f configs/repro_tiny_ft200_ns.yaml
+test -f scripts/prepare_assets.py
+test -f scripts/download_tiny_checkpoint.py
+echo "FORK_CODE_OK"
+```
+
+如果 `git clone` 成功但 `git switch` 失败，原因是 clone 只证明网络和仓库地址可用，
+并不证明目标分支已经被推送到远端。回到 4.1.4 和 4.1.5 检查分支推送。
 
 #### 4.2. 方式 B：作者公开仓库 + 代码包
 
