@@ -193,6 +193,30 @@ moepot_bita_code.zip
 - 能看到 JupyterLab 和 SSH 入口。
 - 页面上四个挂载项的名称和路径与上表一致。
 
+#### 2.2. 当前开发机连接信息
+
+本次创建好的开发机：
+
+```text
+Host：xj-member.bitahub.com
+Port：42289
+User：root
+```
+
+本地终端 SSH 登录：
+
+```bash
+ssh -p 42289 root@xj-member.bitahub.com
+```
+
+密码以 BitaHub 开发机详情页显示为准，不写入代码包或文档。开发机重启或重新创建后，端口可能变化，届时以页面实际信息为准。
+
+验收标准：
+
+- 使用上述命令可以进入开发机 shell。
+- `hostname` 命令正常返回。
+- `/data/nestor_moepot_ns`、`/data/nestor_1e5`、`/data/nestor_env` 和 `/model/nestor_moepot_tiny` 均可访问。
+
 ### 3. 创建必要目录
 
 打开 JupyterLab Terminal：
@@ -240,7 +264,7 @@ git switch -c repro/moepot-tiny-ns-bita-v2 c36ec22aa492b9460d2e9f24cf4f0354d0f07
 
 ```powershell
 cd "本地代码包所在目录"
-scp -P <开发机端口> moepot_bita_code.zip root@<开发机地址>:/code/
+scp -P 42289 moepot_bita_code.zip root@xj-member.bitahub.com:/code/
 ```
 
 第 3 步回到 JupyterLab Terminal 解压覆盖：
@@ -671,3 +695,11 @@ NS 1e-3：训练 1000、测试 200、时间步 50
 开发机运行中可直接在 JupyterLab 文件浏览器查看 `training_curve.png`、`history.csv` 和 `status.json`。
 
 开发机关机后，可在 BitaHub 的 `nestor_moepot_ns` 数据集页面查看 `runs` 下的小文件。最终模型通常继续留在云端，不需要下载到本地。
+
+如需从当前开发机下载轻量结果：
+
+```bash
+scp -P 42289 \
+  root@xj-member.bitahub.com:/data/nestor_moepot_ns/runs/summary/report.md \
+  .
+```
