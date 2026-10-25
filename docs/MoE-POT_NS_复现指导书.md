@@ -1,4 +1,4 @@
-# MoE-POT-Tiny NS 零样本与 FT200 BitaHub 复现指导书
+# MoE-POT-Tiny NS 零样本与 FT200 BitaHub 复现指导书（直接克隆代码版）
 
 ## 目标
 
@@ -11,7 +11,11 @@
 
 先记录和展示原始结果。验收预警为 zero-shot 相对偏差不超过 1%、FT200 相对偏差不超过 5%，但预警不替代原始数值。
 
-本实验固定作者仓库提交 `c36ec22aa492b9460d2e9f24cf4f0354d0f07540`，使用独立分支 `repro/tiny-ns-ft200`。不改模型结构或训练公式。
+本实验固定作者仓库提交 `c36ec22aa492b9460d2e9f24cf4f0354d0f07540`，使用独立分支
+`repro/tiny-ns-ft200-direct-clone`。不改模型结构或训练公式。
+
+本分支采用“开发机启动后直接 clone 公开仓库”的方案：不配置开发机创建页不存在的
+代码映射字段，不依赖 BitaHub 的 GitHub API Key，也不要求使用个人访问 Token。
 
 ## 参数
 
@@ -60,15 +64,15 @@ NS 1e-3 原始轨迹总大小约 4.1GB，裁剪后训练/测试数据约 1GB；�
 | 数据库 | `nestor_env` | 共享 Python/PyTorch 环境 | `/data/nestor_env` | 首次安装时读写 |
 | 模型 | `nestor_moepot_tiny` | MoE-POT-Tiny checkpoint | `/model/nestor_moepot_tiny` | 初始上传时读写 |
 | 文件存储 | `nestor_moepot_storage` | 代码补丁或其他文件中转；如界面不要求可不创建 | 以平台实际路径为准 | 读写 |
-| 开发机 | `moepot-tiny-ns-4090` | 执行数据转换、zero-shot、冒烟和 FT200 | 代码映射到 `/code` | 读写 |
+| 开发机 | `moepot-tiny-ns-4090` | 执行数据转换、zero-shot、冒烟和 FT200 | 启动后克隆代码到 `/code/MoEPOT` | 读写 |
 
 BitaHub 开发机挂载对话框中的资源类型只有“数据库、模型、文件存储”三个选项。
 因此：
 
 - 在“数据&存储 -> 数据集”中创建或引用的数据资源，在挂载时选择 `数据库`。
 - Tiny checkpoint 资源选择 `模型`。
-- 代码仓库不是数据库或模型挂载项，应在开发机配置的“代码映射/训练代码”中选择
-  `MoEPOT-public`，映射路径填写 `/code`。
+- 开发机创建页面没有“代码映射/训练代码”字段。代码不作为挂载资源；开发机启动后，
+  在 WebTerminal 中把公开仓库克隆到 `/code/MoEPOT`。
 - 只有在需要上传补丁或临时文件时，才使用 `nestor_moepot_storage` 并选择
   `文件存储`；本流程的核心数据仍放在 `nestor_moepot_ns` 数据库中。
 
@@ -81,6 +85,8 @@ BitaHub 开发机挂载对话框中的资源类型只有“数据库、模型、
 数据&存储 -> 存储管理
 管理&配置 -> 代码管理
 ```
+
+其中“代码管理”只保留为备用入口，本分支的直接克隆流程不需要它。
 
 #### 1.1 确认现有 `nestor_1e5` 数据集
 
@@ -196,7 +202,12 @@ BitaHub 开发机挂载对话框中的资源类型只有“数据库、模型、
 
 此时可以先创建空模型资源，第 8 步再从 Hugging Face 下载 `model_moepot_tiny.pth` 并登记。
 
-#### 1.6 配置代码仓库
+#### 1.6 代码授权说明（本分支跳过）
+
+> **直接克隆分支的主流程不需要本步骤。** 公开仓库可以匿名克隆，开发机创建页面也
+> 没有代码映射字段。因此不要为了本次复现创建 BitaHub 授权代码或 GitHub Token；
+> 直接跳到 1.7。以下内容仅保留给“BitaHub 其他页面明确强制要求代码授权”的备用
+> 情形，不属于本次推荐执行路径。
 
 进入：
 
@@ -343,15 +354,15 @@ Settings -> Developer settings -> Personal access tokens
 连接状态：正常/已授权
 ```
 
-如果创建开发机时需要选择授权代码，选择 `MoEPOT-public`，代码映射路径填写：
+只有在另一个 BitaHub 页面明确要求“代码映射”字段时，才选择
+`MoEPOT-public` 并填写路径：
 
 ```text
 /code
 ```
 
-BitaHub 通常会把仓库内容放到 `/code/MoEPOT`。开发机启动前只记录这个目标路径，
-不要尝试检查目录。启动后如果平台自动生成的是其他目录，例如
-`/code/MoEPOT-main`，在第 3 步进入 WebTerminal 后规范目录名。
+本分支使用的开发机创建页面没有该字段，所以不要尝试寻找或配置它。代码统一在
+开发机启动后由第 3 步克隆，最终仍使用 `/code/MoEPOT`。
 
 不要直接把内容复制到 `/code` 根目录，因为后续命令和 Python 导入都要求仓库目录名为
 `MoEPOT`。开发机中的最终路径必须是：
@@ -362,12 +373,9 @@ BitaHub 通常会把仓库内容放到 `/code/MoEPOT`。开发机启动前只记
 
 目录名不能保留为 `MoEPOT-main`、`moe-pot` 或其他名称，因为作者代码使用 `MoEPOT.models...` 导入。
 
-作者仓库授权只提供作者 `main` 分支，不包含本次生成的本地复现分支。因此还需要在
-开发机启动后，通过 WebTerminal 的文件上传功能，把本地 `repro_changes.patch`
-上传到云端 `/code/repro_changes.patch`。创建分支和应用补丁的具体命令统一放在
-第 3 步执行。
-
-如果 BitaHub 的代码授权允许选择分支，选择作者仓库的 `main` 分支；不要选择其他实验分支。
+如果已在 BitaHub 做过代码授权也不必删除，但它不会把仓库自动放进开发机。本分支
+仍以第 3 步的直接 clone 为准。之后通过 WebTerminal 上传本地
+`repro_changes_direct_clone.patch` 到 `/code/repro_changes_direct_clone.patch`。
 
 #### 1.7 创建开发机 `moepot-tiny-ns-4090`
 
@@ -383,11 +391,12 @@ BitaHub 通常会把仓库内容放到 `/code/MoEPOT`。开发机启动前只记
 开发机名称：moepot-tiny-ns-4090
 实例规格：1 卡 RTX 4090
 实例数量：1
-训练代码/工作目录映射：/code
 共享内存：建议 102400 MB
 ```
 
-该实验使用单卡开发机，不需要创建分布式训练任务。zero-shot、冒烟和两次 FT200 都在此开发机中顺序执行。
+该实验使用单卡开发机，不需要创建分布式训练任务。开发机创建页面没有“代码映射/
+训练代码”字段时直接忽略，代码在第 3 步从公开仓库克隆。zero-shot、冒烟和两次
+FT200 都在此开发机中顺序执行。
 
 #### 1.8 配置开发机资源挂载
 
@@ -400,12 +409,9 @@ BitaHub 通常会把仓库内容放到 `/code/MoEPOT`。开发机启动前只记
 | 3 | `nestor_env` | 数据库 | `/data/nestor_env` | 读写 |
 | 4 | `nestor_moepot_tiny` | 模型 | `/model/nestor_moepot_tiny` | 读写 |
 
-代码仓库 `MoEPOT-public` 不在这四个资源挂载项中。在开发机创建页面的
-“代码映射/训练代码”字段选择 `MoEPOT-public`，填写映射路径：
-
-```text
-/code
-```
+代码仓库 `MoEPOT-public` 不在这四个资源挂载项中。开发机创建页面没有代码映射字段，
+因此本步不要寻找该字段，也不要把代码伪装成数据库或文件存储挂载。开发机启动后，
+在第 3 步进入 WebTerminal，把公开仓库克隆到 `/code/MoEPOT`。
 
 如果页面还要求选择文件存储资源，才添加：
 
@@ -425,7 +431,7 @@ BitaHub 通常会把仓库内容放到 `/code/MoEPOT`。开发机启动前只记
 - 模型资源名称为 `nestor_moepot_tiny`。
 - 开发机名称为 `moepot-tiny-ns-4090`，规格为 1 卡 RTX 4090。
 - 三个数据库资源和一个模型资源已加入挂载列表。
-- 代码选择 `MoEPOT-public`，并映射到 `/code`。
+- 没有配置不存在的“代码映射/训练代码”字段。
 - 数据、环境、模型和代码不在实例的临时系统盘中。
 
 以上检查只看页面字段，不需要终端。确认无误后点击创建并启动开发机。
@@ -494,73 +500,51 @@ df -h 可读取三个持久化或映射目录
 
 ### 3. 放置代码
 
-#### 3.1 可选：验证 GitHub Token
+#### 3.1 从公开 GitHub 仓库克隆代码
 
-开发机启动以后才能在 BitaHub 终端验证 Token。如果第 1.6 步授权失败，而 Token
-还在手上，可以执行：
-
-```bash
-read -r -s -p "GitHub Token: " GITHUB_TOKEN
-echo
-curl -i \
-  -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-  https://api.github.com/repos/haiyangxin/MoEPOT
-unset GITHUB_TOKEN
-```
-
-成功时应看到 `HTTP/2 200`，并返回：
-
-```text
-"full_name": "haiyangxin/MoEPOT"
-"private": false
-```
-
-常见错误：
-
-- `401 Bad credentials`：Token 不完整、粘贴错误、包含多余空格或已经过期。
-- `403` 或 `404`：仓库访问范围设置有误，或者 Token 已被撤销。
-- BitaHub 提示无法识别 `github_pat_...`，但本命令返回 `200`：改用第 1.6.2 节的
-  Classic Token `public_repo`。
-
-#### 3.2 查找或克隆授权代码
-
-第 1.6 步完成代码授权、第 2 步启动开发机后，先检查 BitaHub 是否已经把授权仓库
-放到 `/code/MoEPOT`，并规范可能的自动目录名：
+第 2 步启动开发机并进入 WebTerminal 后执行：
 
 ```bash
+mkdir -p /code
 cd /code
-if [[ -d /code/MoEPOT-main && ! -e /code/MoEPOT ]]; then
-  mv /code/MoEPOT-main /code/MoEPOT
-fi
+
+git ls-remote https://github.com/haiyangxin/MoEPOT.git HEAD
+
 if [[ ! -d /code/MoEPOT/.git ]]; then
-  echo "未发现 /code/MoEPOT，使用公开仓库地址克隆"
   git clone https://github.com/haiyangxin/MoEPOT.git
 fi
+
 cd /code/MoEPOT
 test -d .git
 git rev-parse --show-toplevel
 ```
 
-#### 3.3 应用复现补丁并创建本地分支
+公开仓库不需要 GitHub Token。`git ls-remote` 应返回一个 40 位提交哈希；如果这一步
+无法连接 GitHub，先检查开发机网络/DNS，不要在此时改成私有仓库或反复更换 Token。
+
+如果 `/code/MoEPOT` 在之前尝试中已经存在，只要 `test -d .git` 成功就复用，不要
+重复克隆。
+
+#### 3.2 应用复现补丁并创建本地分支
 
 通过 WebTerminal 上传补丁，并确认文件存在：
 
 ```bash
-ls -lh /code/repro_changes.patch
-test -s /code/repro_changes.patch
+ls -lh /code/repro_changes_direct_clone.patch
+test -s /code/repro_changes_direct_clone.patch
 ```
 
 固定作者提交并创建本地复现分支：
 
 ```bash
 git fetch --depth 1 origin c36ec22aa492b9460d2e9f24cf4f0354d0f07540
-if git show-ref --verify --quiet refs/heads/repro/tiny-ns-ft200; then
-  git switch repro/tiny-ns-ft200
+if git show-ref --verify --quiet refs/heads/repro/tiny-ns-ft200-direct-clone; then
+  git switch repro/tiny-ns-ft200-direct-clone
 else
-  git switch -c repro/tiny-ns-ft200 c36ec22aa492b9460d2e9f24cf4f0354d0f07540
+  git switch -c repro/tiny-ns-ft200-direct-clone c36ec22aa492b9460d2e9f24cf4f0354d0f07540
 fi
-git apply --check /code/repro_changes.patch
-git apply /code/repro_changes.patch
+git apply --check /code/repro_changes_direct_clone.patch
+git apply /code/repro_changes_direct_clone.patch
 ```
 
 不要上传数据或模型到 `/code`；这里只上传约几十 KB 的补丁。
@@ -570,7 +554,7 @@ git apply /code/repro_changes.patch
 ```bash
 cd /code/MoEPOT
 git branch --show-current
-# repro/tiny-ns-ft200
+# repro/tiny-ns-ft200-direct-clone
 git merge-base --is-ancestor c36ec22aa492b9460d2e9f24cf4f0354d0f07540 HEAD
 echo "base commit check: PASS"
 test -f scripts/run_zero_shot.sh
