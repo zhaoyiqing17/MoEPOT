@@ -231,13 +231,25 @@ GitHub 右上角头像
 | Token name | `bitahub-moepot-readonly-20261025` |
 | Expiration | `7 days`，复现完成后可提前撤销 |
 | Resource owner | 你自己的个人账号 |
-| Repository access | `Public Repositories (read-only)` |
-| Repository permissions | 只设置 `Contents: Read-only` |
-| Metadata | 如显示为必选，则保留 `Read-only` |
+| Repository access | 如显示 `Public Repositories (read-only)`，选择它 |
+| Repository permissions | 不需要额外添加权限，全部保持 `No access` |
+| Contents | 不需要手动配置 |
 | 其他权限 | 全部保持 `No access` |
 
-重点是不要授予写权限。BitaHub 只需要读取公开仓库
-`haiyangxin/MoEPOT`，不需要修改 GitHub 仓库、Actions、Secrets 或用户资料。
+GitHub 官方文档明确说明：每个 Fine-grained Token 都自动包含 GitHub 上所有公开
+仓库的只读访问。因此 `haiyangxin/MoEPOT` 这种公开仓库**不需要**在
+`Repository permissions` 中再寻找 `Contents: Read-only`。看不到这个选项是正常的，
+不要把 `Contents` 改成 `Read and write`，也不需要新增任何权限。
+
+BitaHub 只需要读取公开仓库 `haiyangxin/MoEPOT`，不需要修改 GitHub 仓库、
+Actions、Secrets 或用户资料。
+
+如果在 `Repository access` 中：
+
+- 有 `Public Repositories (read-only)`：直接选择。
+- 只有 `All repositories` 和 `Only select repositories` 两个选项：不要为了作者仓库
+  授权全部私有仓库；保留最小范围设置，并将 `Repository permissions` 全部留为
+  `No access`，公开仓库读取能力仍然自动存在。
 
 点击 `Generate token` 后会显示一次类似下面的 Token：
 
