@@ -193,19 +193,68 @@ find /data/nestor_1e5 -maxdepth 2 -type f | head
 管理&配置 -> 代码管理
 ```
 
-代码仓库使用名称 `MoEPOT`，来源为：
+点击“新建授权代码”或同等入口后，按 BitaHub 表单逐项填写：
+
+| BitaHub 表单字段 | 填写内容 | 说明 |
+|---|---|---|
+| 授权代码名称 | `MoEPOT-public` | 建议使用这个名称区分作者公开仓库和后续本地复现分支 |
+| 授权仓库类型 | 页面分组标题，不需要单独输入 | 在下方的仓库类型下拉项中选择 |
+| 请选择授权仓库类型 | `GitHub` | 代码实际托管在 GitHub；如果另有公开/私有选项，选择公开仓库 |
+| 授权仓库地址 | `https://github.com/haiyangxin/MoEPOT.git` | 作者公开仓库；不要填写本地目录或 `repro_changes.patch` |
+| Access Tokens key | 按下方规则填写 | 不要把真实 Token 写进本指南、日志、代码或聊天消息 |
+
+本实验使用的作者仓库是公开仓库，因此 Access Token 按以下顺序处理：
+
+1. 如果 `Access Tokens key` 标为可选并且允许留空，先留空并点击授权或连接测试。
+2. 如果 BitaHub 强制要求填写，使用你自己的 GitHub Personal Access Token。
+3. 如果 GitHub 提供细粒度 Token，只授权 `haiyangxin/MoEPOT` 的只读仓库内容权限。
+4. 如果只能使用 Classic Token，公开仓库只读通常不需要勾选额外权限。
+5. 不要把 Token 发给我，也不要执行 `git remote -v` 后公开包含 Token 的 URL。
+
+授权完成后返回：
 
 ```text
-https://github.com/haiyangxin/MoEPOT.git
+管理&配置 -> 代码管理
 ```
 
-如果选择网页上传，也可以上传本次生成的项目分支或 `repro_changes.patch`。开发机中的最终路径必须是：
+确认列表中显示：
+
+```text
+授权代码名称：MoEPOT-public
+仓库类型：GitHub
+仓库地址：https://github.com/haiyangxin/MoEPOT.git
+连接状态：正常/已授权
+```
+
+如果创建开发机时需要选择授权代码，选择 `MoEPOT-public`，代码映射路径填写：
+
+```text
+/code
+```
+
+BitaHub 通常会把仓库内容放到 `/code/MoEPOT`。如果平台自动生成的是其他目录，例如 `/code/MoEPOT-main`，进入 WebTerminal 后将其规范为：
+
+```bash
+cd /code
+if [[ -d MoEPOT-main && ! -e MoEPOT ]]; then
+  mv MoEPOT-main MoEPOT
+fi
+cd /code/MoEPOT
+test -d .git
+git rev-parse --show-toplevel
+```
+
+不要直接把内容复制到 `/code` 根目录，因为后续命令和 Python 导入都要求仓库目录名为 `MoEPOT`。开发机中的最终路径必须是：
 
 ```text
 /code/MoEPOT
 ```
 
-目录名不能改成 `MoEPOT-main`、`moe-pot` 或其他名称，因为作者代码使用 `MoEPOT.models...` 导入。
+目录名不能保留为 `MoEPOT-main`、`moe-pot` 或其他名称，因为作者代码使用 `MoEPOT.models...` 导入。
+
+作者仓库授权只提供作者 `main` 分支，不包含本次生成的本地复现分支。因此还需要通过 BitaHub WebTerminal 的文件上传功能，把本地 `repro_changes.patch` 上传到云端 `/code/repro_changes.patch`。创建分支和应用补丁的具体命令统一放在第 2 步执行。
+
+如果 BitaHub 的代码授权允许选择分支，选择作者仓库的 `main` 分支；不要选择其他实验分支。
 
 #### 1.7 创建开发机 `moepot-tiny-ns-4090`
 
@@ -282,19 +331,39 @@ df -h 可读取三个持久化或映射目录
 
 ### 2. 放置代码
 
-优先使用工作区生成的完整 `MoEPOT` 仓库，目录名必须保持为 `MoEPOT`，上传后位于 `/code/MoEPOT`。如果从作者仓库重新创建分支，则执行：
+第 1.6 步完成代码授权并启动开发机后，先检查 BitaHub 是否已经把授权仓库放到 `/code/MoEPOT`：
 
 ```bash
 cd /code
-git clone https://github.com/haiyangxin/MoEPOT.git
+if [[ ! -d /code/MoEPOT/.git ]]; then
+  echo "未发现 /code/MoEPOT，使用公开仓库地址克隆"
+  git clone https://github.com/haiyangxin/MoEPOT.git
+fi
 cd /code/MoEPOT
+test -d .git
+```
+
+通过 WebTerminal 上传补丁，并确认文件存在：
+
+```bash
+ls -lh /code/repro_changes.patch
+test -s /code/repro_changes.patch
+```
+
+固定作者提交并创建本地复现分支：
+
+```bash
 git fetch --depth 1 origin c36ec22aa492b9460d2e9f24cf4f0354d0f07540
-git checkout -b repro/tiny-ns-ft200 c36ec22aa492b9460d2e9f24cf4f0354d0f07540
+if git show-ref --verify --quiet refs/heads/repro/tiny-ns-ft200; then
+  git switch repro/tiny-ns-ft200
+else
+  git switch -c repro/tiny-ns-ft200 c36ec22aa492b9460d2e9f24cf4f0354d0f07540
+fi
 git apply --check /code/repro_changes.patch
 git apply /code/repro_changes.patch
 ```
 
-建议通过 BitaHub WebTerminal 上传约几 MB 的 `repro_changes.patch`，不要上传数据或模型。
+不要上传数据或模型到 `/code`；这里只上传约几十 KB 的补丁。
 
 验收：
 
