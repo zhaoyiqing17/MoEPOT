@@ -211,6 +211,117 @@ find /data/nestor_1e5 -maxdepth 2 -type f | head
 4. 如果只能使用 Classic Token，公开仓库只读通常不需要勾选额外权限。
 5. 不要把 Token 发给我，也不要执行 `git remote -v` 后公开包含 Token 的 URL。
 
+##### 1.6.1 优先创建 Fine-grained Personal Access Token
+
+在浏览器中登录你自己的 GitHub 账号，按以下路径进入设置：
+
+```text
+GitHub 右上角头像
+-> Settings
+-> Developer settings
+-> Personal access tokens
+-> Fine-grained tokens
+-> Generate new token
+```
+
+填写或选择：
+
+| GitHub 字段 | 推荐值 |
+|---|---|
+| Token name | `bitahub-moepot-readonly-20261025` |
+| Expiration | `7 days`，复现完成后可提前撤销 |
+| Resource owner | 你自己的个人账号 |
+| Repository access | `Public Repositories (read-only)` |
+| Repository permissions | 只设置 `Contents: Read-only` |
+| Metadata | 如显示为必选，则保留 `Read-only` |
+| 其他权限 | 全部保持 `No access` |
+
+重点是不要授予写权限。BitaHub 只需要读取公开仓库
+`haiyangxin/MoEPOT`，不需要修改 GitHub 仓库、Actions、Secrets 或用户资料。
+
+点击 `Generate token` 后会显示一次类似下面的 Token：
+
+```text
+github_pat_xxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+真实 Token 只显示一次。立即复制，填入 BitaHub 的 `Access Tokens key`：
+
+```text
+Access Tokens key：github_pat_填入完整Token
+```
+
+粘贴时只填写 Token 本身：
+
+- 不要添加 `Bearer `、`token ` 或引号。
+- 不要带入换行和多余空格。
+- 不要把这个值写入指南、项目文件、shell 历史或聊天消息。
+- 不要使用别人的 Token。
+
+##### 1.6.2 Fine-grained Token 不可用时的 Classic Token
+
+如果 BitaHub 明确只支持 Classic Token，或者 Fine-grained Token 授权后仍返回
+`403`，回到：
+
+```text
+GitHub 右上角头像
+-> Settings
+-> Developer settings
+-> Personal access tokens
+-> Tokens (classic)
+-> Generate new token (classic)
+```
+
+填写：
+
+```text
+Note：bitahub-moepot-readonly
+Expiration：7 days
+Scopes：先不勾选任何权限
+```
+
+公开仓库不勾选 scope 时通常已经可以只读访问。如果 BitaHub 使用这个无 scope
+Token 仍返回 `401/403`，先撤销它，再生成一个仅勾选 `public_repo` 的兼容 Token。
+不要勾选 `repo`，更不要勾选 `admin:org`、`delete_repo`、`workflow` 等无关权限。
+生成的 Classic Token 通常以 `ghp_` 开头，同样将完整 Token 原样填入 BitaHub 的
+`Access Tokens key`。
+
+##### 1.6.3 在 BitaHub 之前先验证 Token
+
+验证命令不会把 Token 写在命令行参数或 shell 历史中：
+
+```bash
+read -r -s -p "GitHub Token: " GITHUB_TOKEN
+echo
+curl -fsS \
+  -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+  https://api.github.com/repos/haiyangxin/MoEPOT \
+  | head -n 20
+unset GITHUB_TOKEN
+```
+
+成功时会返回包含以下字段的 JSON：
+
+```text
+"full_name": "haiyangxin/MoEPOT"
+"private": false
+```
+
+常见错误：
+
+- `401 Bad credentials`：Token 不完整、粘贴错误、过长空格或已过期。
+- `403` 或 `404`：Fine-grained Token 没有 `Contents: Read-only`，或仓库访问范围选错。
+- `Support for password authentication was removed`：BitaHub 没有使用 Token，误填了 GitHub 登录密码。
+- BitaHub 授权成功但克隆失败：删除原授权代码后，用 Classic Token 的 `public_repo` 权限重新授权。
+
+完成第 2 步并确认 `/code/MoEPOT` 可用后，应在 GitHub 中撤销这个短期 Token：
+
+```text
+Settings -> Developer settings -> Personal access tokens
+-> 找到 bitahub-moepot-readonly-20261025
+-> Revoke/Delete
+```
+
 授权完成后返回：
 
 ```text
