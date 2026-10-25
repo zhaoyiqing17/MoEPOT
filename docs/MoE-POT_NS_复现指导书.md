@@ -46,33 +46,239 @@ NS 1e-3 原始轨迹总大小约 4.1GB，裁剪后训练/测试数据约 1GB；�
 
 ### 1. 创建并挂载 BitaHub 资源
 
-按新版界面操作：
+本指南统一使用以下名称。名称、角色和路径必须对应，后续脚本会按这些路径寻找数据和模型。
+
+| 资源类型 | BitaHub 中的名称 | 用途 | 挂载路径 | 权限 |
+|---|---|---|---|---|
+| 现有数据集 | `nestor_1e5` | NS 1e-5 原始或预处理数据 | `/data/nestor_1e5` | 只读 |
+| 新建数据集 | `nestor_moepot_ns` | NS 1e-3、规范化 HDF5、权重缓存、日志和结果 | `/data/nestor_moepot_ns` | 读写 |
+| 环境数据集 | `nestor_env` | 共享 Python/PyTorch 环境 | `/data/nestor_env` | 首次安装时读写 |
+| 新建模型资源 | `nestor_moepot_tiny` | MoE-POT-Tiny checkpoint | `/model/nestor_moepot_tiny` | 初始上传时读写 |
+| 底层存储桶（如界面要求） | `nestor_moepot_storage` | 数据集、模型和代码的持久化后端或上传中转 | 以平台实际路径为准 | 读写 |
+| 开发机 | `moepot-tiny-ns-4090` | 执行数据转换、zero-shot、冒烟和 FT200 | `/code` 映射训练代码 | 读写 |
+
+按新版界面操作，不使用旧版“项目”入口：
 
 ```text
+开发&训练 -> 开发机
+模型&推理 -> 模型库
 数据&存储 -> 数据集
 数据&存储 -> 存储管理
-模型&推理 -> 模型库
-开发&训练 -> 开发机
 管理&配置 -> 代码管理
 ```
 
-创建以下资源并挂载到开发机：
+#### 1.1 确认现有 `nestor_1e5` 数据集
+
+进入：
 
 ```text
-/data/nestor_1e5            已有数据，只读输入
-/data/nestor_moepot_ns      新建工作数据，读写
-/data/nestor_env            共享环境
-/model/nestor_moepot_tiny   新建模型资源
-/code                       代码目录
+数据&存储 -> 数据集
 ```
 
-工作数据卷建议预先创建以下目录：
+找到名称为 `nestor_1e5` 的数据集。不要新建同名资源，也不要在这里移动或覆盖原文件。打开数据集后确认其挂载路径为：
+
+```text
+/data/nestor_1e5
+```
+
+该数据集中可以暂时还是原始 MAT、工作 HDF5 或其他结构；第 4 步会盘点并转换，本步骤只负责挂载。
+
+验收：
+
+```bash
+test -d /data/nestor_1e5
+find /data/nestor_1e5 -maxdepth 2 -type f | head
+```
+
+#### 1.2 新建工作数据集 `nestor_moepot_ns`
+
+进入：
+
+```text
+数据&存储 -> 数据集 -> 新建/创建数据集
+```
+
+填写：
+
+```text
+数据集名称：nestor_moepot_ns
+用途/备注：MoE-POT-Tiny NS 1e-5/1e-3 zero-shot 与 FT200
+期望挂载路径：/data/nestor_moepot_ns
+权限：开发机读写
+```
+
+如果界面要求版本名称或备注，可填写：
+
+```text
+版本/标签：tiny-ns-ft200
+```
+
+该数据集不是原始数据备份，而是本次实验的持久化工作区，后续保存：
+
+```text
+/data/nestor_moepot_ns/raw                       NS 1e-3 下载文件
+/data/nestor_moepot_ns/inventory                 数据盘点 JSON
+/data/nestor_moepot_ns/large                     规范化 train/test HDF5
+/data/nestor_moepot_ns/models                    权重卷不可写时的 checkpoint
+/data/nestor_moepot_ns/runs                      zero-shot、冒烟、FT200 和汇总结果
+/data/nestor_moepot_ns/cache/huggingface         Hugging Face 下载缓存
+```
+
+#### 1.3 确认共享环境数据集 `nestor_env`
+
+进入：
+
+```text
+数据&存储 -> 数据集
+```
+
+优先查找名称为 `nestor_env` 的共享环境数据集。如果已经存在，直接复用；如果不存在，则创建：
+
+```text
+数据集名称：nestor_env
+用途：AI4S 项目共享 Python/PyTorch 环境
+期望挂载路径：/data/nestor_env
+权限：首次安装环境时读写，后续训练可只读
+```
+
+本实验只在该环境内安装一次 PyTorch 和依赖，不重复创建每套数据自己的环境。实际 Python 路径为：
+
+```text
+/data/nestor_env/envs/nestor/bin/python
+```
+
+#### 1.4 创建底层存储桶
+
+如果创建数据集或模型时，BitaHub 要求先选择或新建“存储桶”，进入：
+
+```text
+数据&存储 -> 存储管理
+```
+
+新建并统一使用：
+
+```text
+存储桶名称：nestor_moepot_storage
+用途：承载 nestor_moepot_ns、nestor_moepot_tiny 及代码上传中转
+权限：本次开发机读写
+```
+
+如果平台使用“对象存储”或“文件存储”两个不同入口，选择能够持久化到开发机的文件存储；不要选择实例重启后消失的临时存储。训练结果仍统一写入 `/data/nestor_moepot_ns/runs`，不要把结果写到页面无法再次挂载的临时目录。
+
+#### 1.5 新建 Tiny 模型资源 `nestor_moepot_tiny`
+
+进入：
+
+```text
+模型&推理 -> 模型库
+```
+
+创建：
+
+```text
+模型名称：nestor_moepot_tiny
+模型版本/标签：tiny-ns-ft200
+模型说明：MoE-POT-Tiny 30M，预训练 checkpoint
+挂载路径：/model/nestor_moepot_tiny
+权限：首次下载或上传 checkpoint 时读写
+```
+
+此时可以先创建空模型资源，第 7 步再从 Hugging Face 下载 `model_moepot_tiny.pth` 并登记。
+
+#### 1.6 配置代码仓库
+
+进入：
+
+```text
+管理&配置 -> 代码管理
+```
+
+代码仓库使用名称 `MoEPOT`，来源为：
+
+```text
+https://github.com/haiyangxin/MoEPOT.git
+```
+
+如果选择网页上传，也可以上传本次生成的项目分支或 `repro_changes.patch`。开发机中的最终路径必须是：
+
+```text
+/code/MoEPOT
+```
+
+目录名不能改成 `MoEPOT-main`、`moe-pot` 或其他名称，因为作者代码使用 `MoEPOT.models...` 导入。
+
+#### 1.7 创建开发机 `moepot-tiny-ns-4090`
+
+进入：
+
+```text
+开发&训练 -> 开发机 -> 新建开发机
+```
+
+填写：
+
+```text
+开发机名称：moepot-tiny-ns-4090
+实例规格：1 卡 RTX 4090
+实例数量：1
+训练代码/工作目录映射：/code
+共享内存：建议 102400 MB
+```
+
+该实验使用单卡开发机，不需要创建分布式训练任务。zero-shot、冒烟和两次 FT200 都在此开发机中顺序执行。
+
+#### 1.8 在开发机中挂载全部资源
+
+在开发机的“存储挂载”或同等的资源挂载设置中加入以下五项：
+
+| 挂载顺序 | 资源名称 | 资源类型 | 挂载路径 | 权限 |
+|---:|---|---|---|---|
+| 1 | `nestor_1e5` | 数据集 | `/data/nestor_1e5` | 只读 |
+| 2 | `nestor_moepot_ns` | 数据集 | `/data/nestor_moepot_ns` | 读写 |
+| 3 | `nestor_env` | 数据集 | `/data/nestor_env` | 读写 |
+| 4 | `nestor_moepot_tiny` | 模型 | `/model/nestor_moepot_tiny` | 读写 |
+| 5 | `MoEPOT` | 代码仓库/代码目录 | `/code` | 读写 |
+
+挂载完成后启动开发机，并进入 WebTerminal。
+
+#### 1.9 初始化工作目录
+
+在 WebTerminal 中执行：
 
 ```bash
 mkdir -p /data/nestor_moepot_ns/{raw,inventory,large,runs,cache/huggingface}
+mkdir -p /data/nestor_moepot_ns/models
+mkdir -p /code
 ```
 
-验收：开发机 WebTerminal 中五个路径都存在，`touch /data/nestor_moepot_ns/.write_test` 成功。
+#### 1.10 挂载验收
+
+依次检查资源路径、写权限和 GPU：
+
+```bash
+test -d /data/nestor_1e5 && echo "PASS nestor_1e5"
+test -d /data/nestor_moepot_ns && echo "PASS nestor_moepot_ns"
+test -d /data/nestor_env && echo "PASS nestor_env"
+test -d /model/nestor_moepot_tiny && echo "PASS nestor_moepot_tiny"
+test -d /code && echo "PASS code"
+
+touch /data/nestor_moepot_ns/.write_test
+test -f /data/nestor_moepot_ns/.write_test && echo "PASS write access"
+
+nvidia-smi --query-gpu=index,name,memory.total --format=csv,noheader
+df -h /data/nestor_moepot_ns /model/nestor_moepot_tiny /code
+```
+
+验收结果应为：
+
+```text
+五个路径全部存在
+工作数据卷写入成功
+nvidia-smi 显示 NVIDIA GeForce RTX 4090 和约 24GB 显存
+df -h 可读取三个持久化或映射目录
+```
+
+如果某个路径不存在，回到开发机挂载设置检查“资源名称”和“容器内挂载路径”是否同时填写；只填写资源名称或只填写路径都不够。
 
 ### 2. 放置代码
 
