@@ -48,6 +48,11 @@ NS 1e-3 原始轨迹总大小约 4.1GB，裁剪后训练/测试数据约 1GB；�
 
 本指南统一使用以下名称。名称、角色和路径必须对应，后续脚本会按这些路径寻找数据和模型。
 
+> **重要：本步骤全部在 BitaHub 页面中完成。** 开发机启动之前没有 JupyterLab、
+> WebTerminal 或云端 shell，因此无法执行 `test`、`mkdir`、`nvidia-smi` 等命令。
+> 本文所有终端命令都从“第 2 步：启动开发机并验收资源”开始执行。页面暂时看不到
+> Jupyter 入口是正常现象，不代表资源创建失败。
+
 | 资源类型 | BitaHub 中的名称 | 用途 | 挂载路径 | 权限 |
 |---|---|---|---|---|
 | 现有数据集 | `nestor_1e5` | NS 1e-5 原始或预处理数据 | `/data/nestor_1e5` | 只读 |
@@ -81,14 +86,10 @@ NS 1e-3 原始轨迹总大小约 4.1GB，裁剪后训练/测试数据约 1GB；�
 /data/nestor_1e5
 ```
 
-该数据集中可以暂时还是原始 MAT、工作 HDF5 或其他结构；第 4 步会盘点并转换，本步骤只负责挂载。
+该数据集中可以暂时还是原始 MAT、工作 HDF5 或其他结构；第 5 步会盘点并转换，本步骤只负责挂载。
 
-验收：
-
-```bash
-test -d /data/nestor_1e5
-find /data/nestor_1e5 -maxdepth 2 -type f | head
-```
+页面验收：数据集状态正常、名称确认为 `nestor_1e5`、挂载路径已设置为
+`/data/nestor_1e5`。此时不要尝试执行终端命令。
 
 #### 1.2 新建工作数据集 `nestor_moepot_ns`
 
@@ -183,7 +184,7 @@ find /data/nestor_1e5 -maxdepth 2 -type f | head
 权限：首次下载或上传 checkpoint 时读写
 ```
 
-此时可以先创建空模型资源，第 7 步再从 Hugging Face 下载 `model_moepot_tiny.pth` 并登记。
+此时可以先创建空模型资源，第 8 步再从 Hugging Face 下载 `model_moepot_tiny.pth` 并登记。
 
 #### 1.6 配置代码仓库
 
@@ -305,35 +306,11 @@ Scopes：public_repo
 生成 Token，记录页面原始报错，并检查 BitaHub 的“授权仓库类型”是否确实选择了
 GitHub，而不是其他代码平台。
 
-##### 1.6.3 在 BitaHub 之前先验证 Token
+Token 的独立连通性验证需要终端，因此不在本步骤执行。开发机启动后，可在第 3 步
+使用 GitHub API 验证并排查 `401/403`；这一步是可选的，因为 BitaHub 提交授权时
+也会进行一次连接检查。
 
-验证命令不会把 Token 写在命令行参数或 shell 历史中：
-
-```bash
-read -r -s -p "GitHub Token: " GITHUB_TOKEN
-echo
-curl -fsS \
-  -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-  https://api.github.com/repos/haiyangxin/MoEPOT \
-  | head -n 20
-unset GITHUB_TOKEN
-```
-
-成功时会返回包含以下字段的 JSON：
-
-```text
-"full_name": "haiyangxin/MoEPOT"
-"private": false
-```
-
-常见错误：
-
-- `401 Bad credentials`：Token 不完整、粘贴错误、过长空格或已过期。
-- `403` 或 `404`：Fine-grained Token 没有 `Contents: Read-only`，或仓库访问范围选错。
-- `Support for password authentication was removed`：BitaHub 没有使用 Token，误填了 GitHub 登录密码。
-- BitaHub 授权成功但克隆失败：删除原授权代码后，用 Classic Token 的 `public_repo` 权限重新授权。
-
-完成第 2 步并确认 `/code/MoEPOT` 可用后，应在 GitHub 中撤销这个短期 Token：
+完成第 3 步并确认 `/code/MoEPOT` 可用后，应在 GitHub 中撤销这个短期 Token：
 
 ```text
 Settings -> Developer settings -> Personal access tokens
@@ -362,19 +339,12 @@ Settings -> Developer settings -> Personal access tokens
 /code
 ```
 
-BitaHub 通常会把仓库内容放到 `/code/MoEPOT`。如果平台自动生成的是其他目录，例如 `/code/MoEPOT-main`，进入 WebTerminal 后将其规范为：
+BitaHub 通常会把仓库内容放到 `/code/MoEPOT`。开发机启动前只记录这个目标路径，
+不要尝试检查目录。启动后如果平台自动生成的是其他目录，例如
+`/code/MoEPOT-main`，在第 3 步进入 WebTerminal 后规范目录名。
 
-```bash
-cd /code
-if [[ -d MoEPOT-main && ! -e MoEPOT ]]; then
-  mv MoEPOT-main MoEPOT
-fi
-cd /code/MoEPOT
-test -d .git
-git rev-parse --show-toplevel
-```
-
-不要直接把内容复制到 `/code` 根目录，因为后续命令和 Python 导入都要求仓库目录名为 `MoEPOT`。开发机中的最终路径必须是：
+不要直接把内容复制到 `/code` 根目录，因为后续命令和 Python 导入都要求仓库目录名为
+`MoEPOT`。开发机中的最终路径必须是：
 
 ```text
 /code/MoEPOT
@@ -382,7 +352,10 @@ git rev-parse --show-toplevel
 
 目录名不能保留为 `MoEPOT-main`、`moe-pot` 或其他名称，因为作者代码使用 `MoEPOT.models...` 导入。
 
-作者仓库授权只提供作者 `main` 分支，不包含本次生成的本地复现分支。因此还需要通过 BitaHub WebTerminal 的文件上传功能，把本地 `repro_changes.patch` 上传到云端 `/code/repro_changes.patch`。创建分支和应用补丁的具体命令统一放在第 2 步执行。
+作者仓库授权只提供作者 `main` 分支，不包含本次生成的本地复现分支。因此还需要在
+开发机启动后，通过 WebTerminal 的文件上传功能，把本地 `repro_changes.patch`
+上传到云端 `/code/repro_changes.patch`。创建分支和应用补丁的具体命令统一放在
+第 3 步执行。
 
 如果 BitaHub 的代码授权允许选择分支，选择作者仓库的 `main` 分支；不要选择其他实验分支。
 
@@ -406,9 +379,9 @@ git rev-parse --show-toplevel
 
 该实验使用单卡开发机，不需要创建分布式训练任务。zero-shot、冒烟和两次 FT200 都在此开发机中顺序执行。
 
-#### 1.8 在开发机中挂载全部资源
+#### 1.8 配置开发机资源挂载
 
-在开发机的“存储挂载”或同等的资源挂载设置中加入以下五项：
+启动开发机之前，先在其创建页面或“存储挂载”设置中加入以下五项：
 
 | 挂载顺序 | 资源名称 | 资源类型 | 挂载路径 | 权限 |
 |---:|---|---|---|---|
@@ -418,11 +391,48 @@ git rev-parse --show-toplevel
 | 4 | `nestor_moepot_tiny` | 模型 | `/model/nestor_moepot_tiny` | 读写 |
 | 5 | `MoEPOT` | 代码仓库/代码目录 | `/code` | 读写 |
 
-挂载完成后启动开发机，并进入 WebTerminal。
+此时只把挂载配置保存到开发机定义中，不要尝试在浏览器页面中执行目录命令。
 
-#### 1.9 初始化工作目录
+#### 1.9 启动前页面检查
 
-在 WebTerminal 中执行：
+点击“创建/保存”开发机之前，在页面中逐项确认：
+
+- 现有数据集名称为 `nestor_1e5`。
+- 新工作数据集名称为 `nestor_moepot_ns`。
+- 共享环境数据集名称为 `nestor_env`。
+- 模型资源名称为 `nestor_moepot_tiny`。
+- 开发机名称为 `moepot-tiny-ns-4090`，规格为 1 卡 RTX 4090。
+- 四个存储资源和代码映射 `/code` 都已加入挂载列表。
+- 数据、环境、模型和代码不在实例的临时系统盘中。
+
+以上检查只看页面字段，不需要终端。确认无误后点击创建并启动开发机。
+
+### 2. 启动开发机并验收资源
+
+#### 2.1 启动 `moepot-tiny-ns-4090`
+
+进入：
+
+```text
+开发&训练 -> 开发机
+```
+
+找到开发机 `moepot-tiny-ns-4090`，点击“启动”或“运行”。在实例状态变为
+`运行中/RUNNING`、初始化完成后，页面才会出现 `JupyterLab`、`WebTerminal`
+或同等入口。
+
+打开 `JupyterLab` 或 `WebTerminal`，进入终端。后续命令都在这个已启动的开发机
+终端中执行。
+
+页面验收：
+
+- 开发机状态为运行中。
+- 实例规格显示 1 卡 RTX 4090。
+- 页面上可以看到 JupyterLab 或 WebTerminal 入口。
+
+#### 2.2 初始化持久化目录
+
+在已启动开发机的终端中执行：
 
 ```bash
 mkdir -p /data/nestor_moepot_ns/{raw,inventory,large,runs,cache/huggingface}
@@ -430,7 +440,7 @@ mkdir -p /data/nestor_moepot_ns/models
 mkdir -p /code
 ```
 
-#### 1.10 挂载验收
+#### 2.3 挂载验收
 
 依次检查资源路径、写权限和 GPU：
 
@@ -459,19 +469,56 @@ df -h 可读取三个持久化或映射目录
 
 如果某个路径不存在，回到开发机挂载设置检查“资源名称”和“容器内挂载路径”是否同时填写；只填写资源名称或只填写路径都不够。
 
-### 2. 放置代码
+### 3. 放置代码
 
-第 1.6 步完成代码授权并启动开发机后，先检查 BitaHub 是否已经把授权仓库放到 `/code/MoEPOT`：
+#### 3.1 可选：验证 GitHub Token
+
+开发机启动以后才能在 BitaHub 终端验证 Token。如果第 1.6 步授权失败，而 Token
+还在手上，可以执行：
+
+```bash
+read -r -s -p "GitHub Token: " GITHUB_TOKEN
+echo
+curl -i \
+  -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+  https://api.github.com/repos/haiyangxin/MoEPOT
+unset GITHUB_TOKEN
+```
+
+成功时应看到 `HTTP/2 200`，并返回：
+
+```text
+"full_name": "haiyangxin/MoEPOT"
+"private": false
+```
+
+常见错误：
+
+- `401 Bad credentials`：Token 不完整、粘贴错误、包含多余空格或已经过期。
+- `403` 或 `404`：仓库访问范围设置有误，或者 Token 已被撤销。
+- BitaHub 提示无法识别 `github_pat_...`，但本命令返回 `200`：改用第 1.6.2 节的
+  Classic Token `public_repo`。
+
+#### 3.2 查找或克隆授权代码
+
+第 1.6 步完成代码授权、第 2 步启动开发机后，先检查 BitaHub 是否已经把授权仓库
+放到 `/code/MoEPOT`，并规范可能的自动目录名：
 
 ```bash
 cd /code
+if [[ -d /code/MoEPOT-main && ! -e /code/MoEPOT ]]; then
+  mv /code/MoEPOT-main /code/MoEPOT
+fi
 if [[ ! -d /code/MoEPOT/.git ]]; then
   echo "未发现 /code/MoEPOT，使用公开仓库地址克隆"
   git clone https://github.com/haiyangxin/MoEPOT.git
 fi
 cd /code/MoEPOT
 test -d .git
+git rev-parse --show-toplevel
 ```
+
+#### 3.3 应用复现补丁并创建本地分支
 
 通过 WebTerminal 上传补丁，并确认文件存在：
 
@@ -506,7 +553,7 @@ echo "base commit check: PASS"
 test -f scripts/run_zero_shot.sh
 ```
 
-### 3. 准备共享环境
+### 4. 准备共享环境
 
 ```bash
 cd /code/MoEPOT
@@ -528,7 +575,7 @@ python scripts/check_env.py
 
 如现有共享环境被其他项目占用，优先只补缺依赖；如果版本冲突，停止安装并把 `ENV_DIR` 改为 `/data/nestor_env/envs/moepot` 后重新运行，避免破坏 NESTOR 环境。
 
-### 4. 盘点现有 NS 1e-5
+### 5. 盘点现有 NS 1e-5
 
 ```bash
 cd /code/MoEPOT
@@ -563,7 +610,7 @@ python scripts/prepare_fno_ns.py \
 
 验收：生成 `prepare_manifest.json`，其中 train/test 的 shape 分别为 `[1000,64,64,20]` 和 `[200,64,64,20]`。
 
-### 5. 在云端获取 NS 1e-3
+### 6. 在云端获取 NS 1e-3
 
 打开论文 README 中的 FNO 数据链接：
 
@@ -592,7 +639,7 @@ python scripts/preflight_assets.py \
 
 验收：文件可被 `h5py` 读取，变量 `u` 的总轨迹数为 5000、时间步为 50；常见源形状是 `(64,64,50,5000)`。
 
-### 6. 转换并注册 NS 1e-3
+### 7. 转换并注册 NS 1e-3
 
 ```bash
 python scripts/prepare_fno_ns.py \
@@ -607,7 +654,8 @@ python scripts/prepare_fno_ns.py \
 
 采用前 1000 条训练、最后 200 条测试。虽然原训练文件有 4800 条轨迹，论文 Table 6 的 FT200 只使用 1000 条。
 
-然后把两套数据注册到仓库预期路径。下面的 train/test 变量应替换为步骤 4 和本步骤生成的实际文件路径：
+然后把两套数据注册到仓库预期路径。下面的 train/test 变量应替换为步骤 5
+和本步骤生成的实际文件路径：
 
 ```bash
 export NS1E5_TRAIN="/data/nestor_moepot_ns/large/ns2d_1e-5_train.hdf5"
@@ -635,7 +683,7 @@ cat data/large/repro_data_links.json
 (1000,64,64,50), (200,64,64,50)
 ```
 
-### 7. 下载并校验 Tiny checkpoint
+### 8. 下载并校验 Tiny checkpoint
 
 ```bash
 cd /code/MoEPOT
@@ -657,7 +705,7 @@ export MOEPOT_CHECKPOINT=/data/nestor_moepot_ns/models/model_moepot_tiny.pth
 
 再从 BitaHub 页面把该文件登记到 `nestor_moepot_tiny` 模型资源。验收：manifest 中 `model_check` 为 `all Tiny model keys loaded successfully`。
 
-### 8. 运行 zero-shot
+### 9. 运行 zero-shot
 
 ```bash
 cd /code/MoEPOT
@@ -681,7 +729,7 @@ ns2d_fno_1e-3: 0.xxxxx
 
 验收：两个指标都生成，且分别对照 `0.0682`、`0.00768`。如果结果相差数量级、出现 NaN 或 checkpoint 键错误，停止后续 FT200，先检查权重版本和数据布局。
 
-### 9. 各跑 5 个冒烟 epoch
+### 10. 各跑 5 个冒烟 epoch
 
 先跑 NS 1e-5：
 
@@ -709,9 +757,9 @@ grep '^epoch' "$RUN_DIR/logs.txt" | tail -n 5
 
 冒烟脚本仍按 200 epoch 构造 OneCycle，因此学习率轨迹与正式训练一致，只是实际执行 5 个 epoch。验收：每个 run 有 5 条 epoch 记录，测试 L2RE 是有限数，`model.pth` 可加载。冒烟结果不能作为论文结果。
 
-### 10. 正式训练 FT200
+### 11. 正式训练 FT200
 
-#### 10.1 启动 NS 1e-5
+#### 11.1 启动 NS 1e-5
 
 在 BitaHub 开发机的 WebTerminal 中执行：
 
@@ -736,7 +784,7 @@ export RUN_DIR=/data/nestor_moepot_ns/runs/finetune/ns1e-5/full
 
 如果关闭浏览器或 WebTerminal，`nohup` 训练仍会继续。
 
-#### 10.2 实时查看 NS 1e-5 状态
+#### 11.2 实时查看 NS 1e-5 状态
 
 只查看一次当前状态：
 
@@ -780,7 +828,7 @@ logs.txt: 每完成一个 epoch 增加一行，epoch 从 0 递增
 
 实时监控命令 `monitor_run.sh ... --follow` 在检测到 PID 不存在后显示 `run has stopped` 并自动退出。
 
-#### 10.3 NS 1e-5 完成验收
+#### 11.3 NS 1e-5 完成验收
 
 进程停止后执行：
 
@@ -808,7 +856,7 @@ tail -n 20 "$RUN_DIR/logs.txt"
 
 两个数据集共用一张 4090，必须串行执行。不要在前一个任务仍显示 `RUNNING` 时启动后一个任务。两次训练都必须从预训练 checkpoint 开始，不能把 NS 1e-5 的 FT200 权重作为 NS 1e-3 的起点。
 
-### 11. 汇总结果
+### 12. 汇总结果
 
 ```bash
 cd /code/MoEPOT
