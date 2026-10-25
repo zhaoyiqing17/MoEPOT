@@ -55,12 +55,22 @@ NS 1e-3 原始轨迹总大小约 4.1GB，裁剪后训练/测试数据约 1GB；�
 
 | 资源类型 | BitaHub 中的名称 | 用途 | 挂载路径 | 权限 |
 |---|---|---|---|---|
-| 现有数据集 | `nestor_1e5` | NS 1e-5 原始或预处理数据 | `/data/nestor_1e5` | 只读 |
-| 新建数据集 | `nestor_moepot_ns` | NS 1e-3、规范化 HDF5、权重缓存、日志和结果 | `/data/nestor_moepot_ns` | 读写 |
-| 环境数据集 | `nestor_env` | 共享 Python/PyTorch 环境 | `/data/nestor_env` | 首次安装时读写 |
-| 新建模型资源 | `nestor_moepot_tiny` | MoE-POT-Tiny checkpoint | `/model/nestor_moepot_tiny` | 初始上传时读写 |
-| 底层存储桶（如界面要求） | `nestor_moepot_storage` | 数据集、模型和代码的持久化后端或上传中转 | 以平台实际路径为准 | 读写 |
-| 开发机 | `moepot-tiny-ns-4090` | 执行数据转换、zero-shot、冒烟和 FT200 | `/code` 映射训练代码 | 读写 |
+| 数据库 | `nestor_1e5` | NS 1e-5 原始或预处理数据 | `/data/nestor_1e5` | 只读 |
+| 数据库 | `nestor_moepot_ns` | NS 1e-3、规范化 HDF5、权重缓存、日志和结果 | `/data/nestor_moepot_ns` | 读写 |
+| 数据库 | `nestor_env` | 共享 Python/PyTorch 环境 | `/data/nestor_env` | 首次安装时读写 |
+| 模型 | `nestor_moepot_tiny` | MoE-POT-Tiny checkpoint | `/model/nestor_moepot_tiny` | 初始上传时读写 |
+| 文件存储 | `nestor_moepot_storage` | 代码补丁或其他文件中转；如界面不要求可不创建 | 以平台实际路径为准 | 读写 |
+| 开发机 | `moepot-tiny-ns-4090` | 执行数据转换、zero-shot、冒烟和 FT200 | 代码映射到 `/code` | 读写 |
+
+BitaHub 开发机挂载对话框中的资源类型只有“数据库、模型、文件存储”三个选项。
+因此：
+
+- 在“数据&存储 -> 数据集”中创建或引用的数据资源，在挂载时选择 `数据库`。
+- Tiny checkpoint 资源选择 `模型`。
+- 代码仓库不是数据库或模型挂载项，应在开发机配置的“代码映射/训练代码”中选择
+  `MoEPOT-public`，映射路径填写 `/code`。
+- 只有在需要上传补丁或临时文件时，才使用 `nestor_moepot_storage` 并选择
+  `文件存储`；本流程的核心数据仍放在 `nestor_moepot_ns` 数据库中。
 
 按新版界面操作，不使用旧版“项目”入口：
 
@@ -381,15 +391,27 @@ BitaHub 通常会把仓库内容放到 `/code/MoEPOT`。开发机启动前只记
 
 #### 1.8 配置开发机资源挂载
 
-启动开发机之前，先在其创建页面或“存储挂载”设置中加入以下五项：
+启动开发机之前，先在其创建页面或“存储挂载”设置中配置以下四项数据库/模型资源：
 
-| 挂载顺序 | 资源名称 | 资源类型 | 挂载路径 | 权限 |
+| 挂载顺序 | 资源名称 | 挂载类型下拉选项 | 挂载路径 | 权限 |
 |---:|---|---|---|---|
-| 1 | `nestor_1e5` | 数据集 | `/data/nestor_1e5` | 只读 |
-| 2 | `nestor_moepot_ns` | 数据集 | `/data/nestor_moepot_ns` | 读写 |
-| 3 | `nestor_env` | 数据集 | `/data/nestor_env` | 读写 |
+| 1 | `nestor_1e5` | 数据库 | `/data/nestor_1e5` | 只读 |
+| 2 | `nestor_moepot_ns` | 数据库 | `/data/nestor_moepot_ns` | 读写 |
+| 3 | `nestor_env` | 数据库 | `/data/nestor_env` | 读写 |
 | 4 | `nestor_moepot_tiny` | 模型 | `/model/nestor_moepot_tiny` | 读写 |
-| 5 | `MoEPOT` | 代码仓库/代码目录 | `/code` | 读写 |
+
+代码仓库 `MoEPOT-public` 不在这四个资源挂载项中。在开发机创建页面的
+“代码映射/训练代码”字段选择 `MoEPOT-public`，填写映射路径：
+
+```text
+/code
+```
+
+如果页面还要求选择文件存储资源，才添加：
+
+| 资源名称 | 挂载类型下拉选项 | 挂载路径 | 权限 |
+|---|---|---|---|
+| `nestor_moepot_storage` | 文件存储 | 按平台生成的路径填写 | 读写 |
 
 此时只把挂载配置保存到开发机定义中，不要尝试在浏览器页面中执行目录命令。
 
@@ -402,7 +424,8 @@ BitaHub 通常会把仓库内容放到 `/code/MoEPOT`。开发机启动前只记
 - 共享环境数据集名称为 `nestor_env`。
 - 模型资源名称为 `nestor_moepot_tiny`。
 - 开发机名称为 `moepot-tiny-ns-4090`，规格为 1 卡 RTX 4090。
-- 四个存储资源和代码映射 `/code` 都已加入挂载列表。
+- 三个数据库资源和一个模型资源已加入挂载列表。
+- 代码选择 `MoEPOT-public`，并映射到 `/code`。
 - 数据、环境、模型和代码不在实例的临时系统盘中。
 
 以上检查只看页面字段，不需要终端。确认无误后点击创建并启动开发机。
