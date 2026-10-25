@@ -63,7 +63,7 @@ class Source:
             self.handle.close()
 
     def read(self, start: int, stop: int, layout: str) -> np.ndarray:
-        if layout == "hwtn":
+        if layout in {"hwtn", "thwn"}:
             chunk = (
                 self.dataset[:, :, :, start:stop]
                 if self.dataset is not None
@@ -71,7 +71,10 @@ class Source:
             )
             if chunk.ndim == 5 and chunk.shape[-1] == 1:
                 chunk = chunk[..., 0]
-            chunk = np.transpose(chunk, (3, 1, 2, 0))
+            if layout == "thwn":
+                chunk = np.transpose(chunk, (3, 1, 2, 0))
+            else:
+                chunk = np.transpose(chunk, (3, 0, 1, 2))
         else:
             chunk = self.dataset[start:stop] if self.dataset is not None else self.array[start:stop]
         chunk = np.asarray(chunk, dtype=np.float32)
@@ -86,6 +89,8 @@ def detect_layout(shape: tuple[int, ...], timesteps: int) -> tuple[str, tuple[in
     if len(shape) != 4:
         raise ValueError(f"expected a 4-D source array (or trailing singleton), got {shape}")
 
+    if shape[0] == timesteps and shape[1] == 64 and shape[2] == 64:
+        return "thwn", (shape[3], 64, 64, timesteps)
     if shape[0] == 64 and shape[1] == 64 and shape[2] == timesteps:
         return "hwtn", (shape[3], 64, 64, timesteps)
     if shape[1] == timesteps and shape[2:] == (64, 64):
@@ -94,7 +99,8 @@ def detect_layout(shape: tuple[int, ...], timesteps: int) -> tuple[str, tuple[in
         return "nhwt", (shape[0], 64, 64, timesteps)
     raise ValueError(
         f"cannot infer FNO layout from source shape {shape}; expected "
-        f"(64,64,{timesteps},N), (N,{timesteps},64,64), or (N,64,64,{timesteps})"
+        f"({timesteps},64,64,N), (64,64,{timesteps},N), "
+        f"(N,{timesteps},64,64), or (N,64,64,{timesteps})"
     )
 
 

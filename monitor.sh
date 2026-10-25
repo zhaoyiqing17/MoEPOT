@@ -1,14 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -lt 1 ]]; then
-  echo "usage: $0 <run-dir> [--follow]" >&2
-  exit 2
-fi
-
-RUN_DIR="$1"
-FOLLOW="${2:-}"
-PID_FILE="$RUN_DIR/pid"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DATA_ROOT="${MOEPOT_DATA_ROOT:-/data/nestor_moepot_ns}"
+STATUS_FILE="$DATA_ROOT/runs/queue/status.json"
+PID_FILE="$DATA_ROOT/runs/queue/pid"
 
 show_status() {
   echo "time: $(date -Is)"
@@ -19,26 +15,23 @@ show_status() {
   fi
   nvidia-smi --query-gpu=index,name,memory.used,memory.total,utilization.gpu \
     --format=csv,noheader || true
-  if [[ -f "$RUN_DIR/zero_shot.log" ]]; then
-    echo "--- zero_shot.log"
-    tail -n 20 "$RUN_DIR/zero_shot.log"
+  if [[ -f "$STATUS_FILE" ]]; then
+    cat "$STATUS_FILE"
   fi
-  if [[ -f "$RUN_DIR/logs.txt" ]]; then
-    echo "--- logs.txt"
-    tail -n 20 "$RUN_DIR/logs.txt"
-  fi
-  if [[ -f "$RUN_DIR/nohup.out" ]]; then
-    echo "--- nohup.out"
-    tail -n 20 "$RUN_DIR/nohup.out"
-  fi
+  for dataset in ns1e-5 ns1e-3; do
+    log="$DATA_ROOT/runs/$dataset/ft200/training.log"
+    if [[ -f "$log" ]]; then
+      echo "--- $dataset"
+      tail -n 5 "$log"
+    fi
+  done
 }
 
-if [[ "$FOLLOW" == "--follow" ]]; then
+if [[ "${1:-}" == "--follow" ]]; then
   while true; do
     clear
     show_status
     if [[ -f "$PID_FILE" ]] && ! kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
-      echo "run has stopped"
       break
     fi
     sleep 60

@@ -96,6 +96,8 @@ parser.add_argument('--T_bundle', type=int, default=1)
 parser.add_argument('--gpu', type=str, default="1")
 parser.add_argument('--comment',type=str, default="")
 parser.add_argument('--log_path',type=str,default='')
+parser.add_argument('--metrics_json',type=str,default='',
+                    help='Optional path for a machine-readable zero-shot result')
 
 
 parser.add_argument('--n_channels',type=int, default=4)   # max channels in the dataset
@@ -228,4 +230,23 @@ print(test_l2_fulls)
 for i in range(len(test_paths)):
     print('{}: {:.5f}'.format(test_paths[i], test_l2_fulls[i]))
 
-print('Total time {} total steps {} Avg time {}'.format(time_test, total_steps, time_test/total_steps))
+avg_inference_seconds = time_test/total_steps if total_steps else None
+print('Total time {} total steps {} Avg time {}'.format(time_test, total_steps, avg_inference_seconds))
+
+if args.metrics_json:
+    os.makedirs(os.path.dirname(args.metrics_json) or '.', exist_ok=True)
+    with open(args.metrics_json, 'w') as metrics_file:
+        json.dump(
+            {
+                'checkpoint': args.resume_path,
+                'datasets': test_paths,
+                'test_l2re': {
+                    name: float(value)
+                    for name, value in zip(test_paths, test_l2_fulls)
+                },
+                'average_inference_seconds_per_step': avg_inference_seconds,
+            },
+            metrics_file,
+            indent=2,
+        )
+    print('metrics_json:', args.metrics_json)

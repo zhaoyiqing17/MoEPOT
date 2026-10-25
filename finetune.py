@@ -7,6 +7,7 @@ os.environ['OMP_NUM_THREADS'] = '16'
 import json
 import time
 import argparse
+import csv
 import torch
 import numpy as np
 import torch.nn as nn
@@ -79,6 +80,8 @@ parser.add_argument('--res', type=int, default=128)
 parser.add_argument('--noise_scale',type=float, default=0)  # finetune时，噪声为0
 parser.add_argument('--smoke_epochs', type=int, default=0,
                     help='Run only this many epochs while keeping the scheduled LR horizon; 0 disables smoke mode')
+parser.add_argument('--resume_training', type=str, default='',
+                    help='Resume optimizer, scheduler and epoch from an experiment latest.pth')
 
 ### shared params 
 parser.add_argument('--width', type=int, default=512)    # width
@@ -155,6 +158,20 @@ def freeze_all_moe_gating_and_feature(model):
                 p.requires_grad = False
 
 
+class Tee:
+    def __init__(self, *streams):
+        self.streams = streams
+
+    def write(self, data):
+        for stream in self.streams:
+            stream.write(data)
+        return len(data)
+
+    def flush(self):
+        for stream in self.streams:
+            stream.flush()
+
+
 
 ################################################################
 # load data and dataloader
@@ -227,12 +244,17 @@ elif os.path.isabs(args.log_path):
 else:
     log_path = os.path.join('./logs', args.log_path + comment)
 os.makedirs(log_path, exist_ok=True)
-model_path = log_path + '/model.pth'  # Save the model path in the logs folder
+history_path = os.path.join(log_path, 'history.csv')
+status_path = os.path.join(log_path, 'status.json')
+latest_path = os.path.join(log_path, 'latest.pth')
+best_path = os.path.join(log_path, 'best.pth')
+final_path = os.path.join(log_path, 'final.pth')
+checkpoint_path = os.path.join(log_path, 'epoch_{:04d}.pth')
 if args.use_writer:
     writer = SummaryWriter(log_dir=log_path)
     fp = open(log_path + '/logs.txt', 'w+',buffering=1)
     json.dump(vars(args), open(log_path + '/params.json', 'w'),indent=4)
-    sys.stdout = fp
+    sys.stdout = Tee(sys.__stdout__, fp)
 
 else:
     writer = None
@@ -241,12 +263,61 @@ print("scheduled_epochs:", args.epochs, "run_epochs:", run_epochs)
 print(model)
 count_parameters(model)
 
+
+def write_status(state, epoch, metrics=None, error=None):
+    payload = {
+        'state': state,
+        'epoch': epoch,
+        'scheduled_epochs': args.epochs,
+        'run_epochs': run_epochs,
+        'dataset': train_paths,
+        'run_dir': os.path.abspath(log_path),
+        'updated_at': time.strftime('%Y-%m-%dT%H:%M:%S%z'),
+        'metrics': metrics or {},
+    }
+    if error:
+        payload['error'] = error
+    with open(status_path, 'w') as status_file:
+        json.dump(payload, status_file, indent=2)
+
+
+start_epoch = 0
+best_l2re = float('inf')
+if args.resume_training:
+    resume_checkpoint = torch.load(args.resume_training, map_location=device)
+    model.load_state_dict(resume_checkpoint['model'])
+    optimizer.load_state_dict(resume_checkpoint['optimizer'])
+    if 'scheduler' in resume_checkpoint and resume_checkpoint['scheduler'] is not None:
+        scheduler.load_state_dict(resume_checkpoint['scheduler'])
+    start_epoch = int(resume_checkpoint.get('epoch', -1)) + 1
+    best_l2re = float(resume_checkpoint.get('best_l2re', best_l2re))
+    print(f"Resuming experiment at epoch {start_epoch} from {args.resume_training}")
+
+if not os.path.exists(history_path):
+    with open(history_path, 'w', newline='') as history_file:
+        writer_csv = csv.writer(history_file)
+        writer_csv.writerow([
+            'epoch', 'train_l2_step', 'train_l2_full', 'test_l2_step',
+            'test_l2_full', 'epoch_seconds', 'learning_rate'
+        ])
+write_status('running', start_epoch - 1)
+
+if start_epoch >= run_epochs:
+    if not os.path.exists(final_path):
+        raise RuntimeError(
+            f"checkpoint reports epoch {start_epoch - 1}, but final.pth is missing in {log_path}"
+        )
+    write_status('finished', run_epochs - 1, {'best_test_l2_full': best_l2re})
+    print(f"Experiment is already complete at epoch {run_epochs - 1}: {log_path}")
+    raise SystemExit(0)
+
 ################################################################
 # Main function for pretraining
 ################################################################
 myloss = SimpleLpLoss(size_average=False)
 iter = 0
-for ep in range(run_epochs):
+for ep in range(start_epoch, run_epochs):
+    epoch_start = default_timer()
     model.train()
     freeze_all_moe_gating_and_feature(model)
     
@@ -312,7 +383,7 @@ for ep in range(run_epochs):
             ## reset model
             if loss.item() > 10 * loss_previous : # or (ep > 50 and l2_full / xx.shape[0] > 0.9):
                 print('loss explodes, loading model from previous epoch')
-                checkpoint = torch.load(model_path,map_location='cuda:{}'.format(args.gpu))
+                checkpoint = torch.load(latest_path,map_location='cuda:{}'.format(args.gpu))
                 model.load_state_dict(checkpoint['model'])
                 optimizer.load_state_dict(checkpoint["optimizer"])
                 loss_previous = loss.item()
@@ -353,8 +424,62 @@ for ep in range(run_epochs):
                 writer.add_scalar("test_loss_step_{}".format(test_paths[id]), test_l2_step_avg, ep)
                 writer.add_scalar("test_loss_full_{}".format(test_paths[id]), test_l2_full_avg, ep)
 
-    if args.use_writer:
-        torch.save({'args': args, 'model': model.state_dict(), 'optimizer': optimizer.state_dict()}, model_path)
+    test_step_value = float(test_l2_steps[0])
+    test_full_value = float(test_l2_fulls[0])
+    current_lr = float(optimizer.param_groups[0]['lr'])
+    epoch_seconds = default_timer() - epoch_start
+    with open(history_path, 'a', newline='') as history_file:
+        writer_csv = csv.writer(history_file)
+        writer_csv.writerow([
+            ep,
+            float(train_l2_step_avg),
+            float(train_l2_full_avg),
+            test_step_value,
+            test_full_value,
+            epoch_seconds,
+            current_lr,
+        ])
+
+    if test_full_value < best_l2re:
+        best_l2re = test_full_value
+        torch.save(
+            {
+                'args': vars(args),
+                'model': model.state_dict(),
+                'optimizer': optimizer.state_dict(),
+                'scheduler': scheduler.state_dict(),
+                'epoch': ep,
+                'best_l2re': best_l2re,
+            },
+            best_path,
+        )
+    latest_state = {
+        'args': vars(args),
+        'model': model.state_dict(),
+        'optimizer': optimizer.state_dict(),
+        'scheduler': scheduler.state_dict(),
+        'epoch': ep,
+        'best_l2re': best_l2re,
+    }
+    torch.save(latest_state, latest_path)
+    if ep == run_epochs - 1:
+        torch.save(latest_state, final_path)
+        if args.epochs == 200:
+            torch.save(latest_state, checkpoint_path.format(200))
+
+    write_status(
+        'running',
+        ep,
+        {
+            'train_l2_step': float(train_l2_step_avg),
+            'train_l2_full': float(train_l2_full_avg),
+            'test_l2_step': test_step_value,
+            'test_l2_full': test_full_value,
+            'best_test_l2_full': best_l2re,
+            'epoch_seconds': epoch_seconds,
+            'learning_rate': current_lr,
+        },
+    )
 
     t_test = default_timer() - t_1
     t2 = t_1 = default_timer()
@@ -371,6 +496,38 @@ for ep in range(run_epochs):
         t_train / len(train_loader), 
         t_load / len(train_loader), 
         t_test))
+
+try:
+    with open(history_path, newline='') as history_file:
+        history_rows = list(csv.DictReader(history_file))
+    plt.figure(figsize=(8, 4.5))
+    plt.plot(
+        [int(row['epoch']) for row in history_rows],
+        [float(row['train_l2_full']) for row in history_rows],
+        label='train',
+    )
+    plt.plot(
+        [int(row['epoch']) for row in history_rows],
+        [float(row['test_l2_full']) for row in history_rows],
+        label='test',
+    )
+    plt.xlabel('epoch')
+    plt.ylabel('L2RE')
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(os.path.join(log_path, 'training_curve.png'), dpi=160)
+    plt.close()
+except Exception as plot_error:
+    print(f"warning: could not write training_curve.png: {plot_error}")
+
+write_status(
+    'finished',
+    run_epochs - 1,
+    {
+        'test_l2_full': float(test_l2_fulls[0]),
+        'best_test_l2_full': best_l2re,
+    },
+)
 
 
 
