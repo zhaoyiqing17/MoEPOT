@@ -552,45 +552,75 @@ export FNO_1E3_SOURCE=/data/nestor_moepot_ns/raw/NavierStokes_V1e-3_N5000_T50.ma
 ls -lh "$FNO_1E3_SOURCE"
 ```
 
-##### 6.2.2. 只有文件夹下载按钮时
+##### 6.2.2. 只有文件夹页面或文件夹下载按钮时
 
-不要在本地点下载按钮。直接在 BitaHub JupyterLab Terminal 下载公开文件夹：
+不要点击文件夹下载按钮。使用代码包中的目录索引脚本读取公开文件夹的文件名和 File ID：
 
 ```bash
+cd /code/MoEPOT
+export ENV_DIR=/data/nestor_env/envs/nestor
+export PATH="$ENV_DIR/bin:$PATH"
 export FNO_DRIVE_FOLDER='https://drive.google.com/drive/folders/1UnbQh2WWc6knEHbLnZaXrKUZhp7pjt-'
 
-gdown --folder --remaining-ok \
-  "$FNO_DRIVE_FOLDER" \
-  --output /data/nestor_moepot_ns/raw/fno-drive
+python scripts/list_drive_folder.py \
+  --url "$FNO_DRIVE_FOLDER" \
+  --match 'NavierStokes_V1e-3_N5000_T50.mat' \
+  --json /data/nestor_moepot_ns/inventory/fno_drive_files.json
+```
 
-export FNO_1E3_SOURCE="$(
-  find /data/nestor_moepot_ns/raw/fno-drive \
-    -type f \
-    -name 'NavierStokes_V1e-3_N5000_T50.mat' \
-    -print -quit
+脚本使用 `gdown.download_folder(..., skip_download=True)`，只解析目录，不下载文件。成功时会输出：
+
+```json
+{
+  "id": "<FNO_1E3_FILE_ID>",
+  "path": ".../NavierStokes_V1e-3_N5000_T50.mat",
+  "filename": "NavierStokes_V1e-3_N5000_T50.mat",
+  "view_url": "https://drive.google.com/file/d/<FNO_1E3_FILE_ID>/view?usp=sharing",
+  "download_url": "https://drive.google.com/uc?export=download&id=<FNO_1E3_FILE_ID>"
+}
+```
+
+也可以让脚本只输出 ID：
+
+```bash
+export FNO_1E3_FILE_ID="$(
+  python scripts/list_drive_folder.py \
+    --url "$FNO_DRIVE_FOLDER" \
+    --match 'NavierStokes_V1e-3_N5000_T50.mat' \
+    --id-only
 )"
 
-test -n "$FNO_1E3_SOURCE"
-echo "FNO_1E3_SOURCE=$FNO_1E3_SOURCE"
+test -n "$FNO_1E3_FILE_ID"
+echo "$FNO_1E3_FILE_ID"
+```
+
+确认 ID 后只下载这个文件：
+
+```bash
+gdown "https://drive.google.com/uc?id=${FNO_1E3_FILE_ID}" \
+  --output /data/nestor_moepot_ns/raw/NavierStokes_V1e-3_N5000_T50.mat
+
+export FNO_1E3_SOURCE=/data/nestor_moepot_ns/raw/NavierStokes_V1e-3_N5000_T50.mat
 ls -lh "$FNO_1E3_SOURCE"
 ```
 
-该方式可能在云端同时下载文件夹中的其他 FNO 数据，数据量大于单文件下载，但不会下载到本地。下载前必须检查 `df -h /data/nestor_moepot_ns` 有足够空间。
-
-如果 `gdown --folder` 返回部分文件下载失败：
+如果脚本提示找不到目标文件名，查看生成的目录清单：
 
 ```bash
-find /data/nestor_moepot_ns/raw/fno-drive -maxdepth 4 -type f | sort
+cat /data/nestor_moepot_ns/inventory/fno_drive_files.json
 ```
 
-先确认目标 MAT 是否已经存在。若文件夹下载得到 ZIP，则先解压再重新查找：
+从清单中找到实际文件名后，替换 `--match` 中的文件名。不要把 `<FNO_1E3_FILE_ID>` 或尖括号原样传给命令。
 
-```bash
-find /data/nestor_moepot_ns/raw/fno-drive -type f -name '*.zip' -print
-unzip -o <下载得到的zip文件> -d /data/nestor_moepot_ns/raw/fno-drive
+浏览器备用方法：在 Google Drive 文件夹中单击目标 `.mat` 文件，打开文件详情页，点击三点菜单或分享按钮，选择“复制链接”。单文件链接应类似：
+
+```text
+https://drive.google.com/file/d/<FILE_ID>/view?usp=sharing
 ```
 
-验收标准：`FNO_1E3_SOURCE` 不为空，文件存在，能被 HDF5/MAT 读取，变量为 `u`，总轨迹数 5000、时间步 50。
+其中 `/d/` 和 `/view` 之间的字符串就是 File ID。只有整个文件夹链接时，先使用上面的目录索引脚本。
+
+验收标准：File ID 不为空；`FNO_1E3_SOURCE` 文件存在、能被 HDF5/MAT 读取，变量为 `u`，总轨迹数 5000、时间步 50。
 
 #### 6.3. 转换并注册两套数据
 
