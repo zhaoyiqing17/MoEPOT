@@ -434,6 +434,45 @@ echo "CODE_OK"
 
 ### 5. 安装共享环境
 
+#### 5.1. 先查询已有共享环境
+
+不要直接重装。先执行：
+
+```bash
+cd /code/MoEPOT
+export ENV_DIR=/data/nestor_env/envs/nestor
+
+if [[ -x "$ENV_DIR/bin/python" ]]; then
+  echo "ENV_EXISTS: $ENV_DIR"
+  "$ENV_DIR/bin/python" --version
+  if "$ENV_DIR/bin/python" scripts/check_env.py; then
+    echo "ENV_READY: 可以跳过安装"
+  else
+    echo "ENV_INCOMPLETE: 执行 5.2 补齐依赖"
+  fi
+else
+  echo "ENV_MISSING: $ENV_DIR 尚无 shared Python 环境"
+fi
+```
+
+根据结果判断：
+
+- 最后出现 `environment check: PASS` 和 `ENV_READY`：共享环境已经完备，直接进入第 6 步。
+- 出现 `ENV_MISSING`：环境尚未创建，继续 5.2。
+- 出现 `MISSING (...)`、`CUDA is required` 或其他异常：环境存在但不完整，继续 5.2。
+- `python --version` 成功不代表环境完整，必须让 `scripts/check_env.py` 实际导入依赖并检查 CUDA。
+
+还可以查看安装标记和占用：
+
+```bash
+cat "$ENV_DIR/.moepot-ready" 2>/dev/null || echo "no ready marker"
+du -sh "$ENV_DIR" 2>/dev/null || true
+```
+
+不要因为环境已存在就直接删除整个目录；安装脚本会在原环境中补齐依赖。
+
+#### 5.2. 仅缺失或不完整时安装
+
 ```bash
 cd /code/MoEPOT
 bash /code/MoEPOT/setup_env.sh
@@ -462,7 +501,8 @@ environment check: PASS
 Environment ready: /data/nestor_env/envs/nestor
 ```
 
-安装中断后重新运行同一命令。
+脚本可重复执行，安装中断后重新运行同一命令。安装完成后重新执行 5.1，确认
+`environment check: PASS`。
 
 ### 6. 云端获取并处理数据
 
