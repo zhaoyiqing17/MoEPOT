@@ -17,12 +17,23 @@ def main() -> None:
     parser.add_argument("--json", type=Path, help="Optional JSON inventory output")
     parser.add_argument("--scratch", type=Path, default=Path("/private/tmp/gdown-index"))
     parser.add_argument("--id-only", action="store_true", help="Print only the matching file ID")
+    parser.add_argument("--no-cookies", action="store_true", help="Retry without cached Drive cookies")
+    parser.add_argument(
+        "--user-agent",
+        default=(
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+        ),
+        help="Browser User-Agent used to read the folder page",
+    )
     args = parser.parse_args()
 
     files = download_folder(
         url=args.url,
         output=str(args.scratch),
         quiet=True,
+        use_cookies=not args.no_cookies,
+        user_agent=args.user_agent,
         remaining_ok=True,
         skip_download=True,
     )

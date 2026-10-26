@@ -568,6 +568,23 @@ python scripts/list_drive_folder.py \
   --json /data/nestor_moepot_ns/inventory/fno_drive_files.json
 ```
 
+如果出现 `Failed to retrieve folder contents`，先升级 `gdown` 并重试：
+
+```bash
+export ENV_DIR=/data/nestor_env/envs/nestor
+"$ENV_DIR/bin/pip" install --upgrade gdown==6.4.2
+```
+
+仍失败时，用“不使用 cookies”和桌面浏览器 User-Agent 再试一次：
+
+```bash
+python scripts/list_drive_folder.py \
+  --url "$FNO_DRIVE_FOLDER" \
+  --match 'NavierStokes_V1e-3_N5000_T50.mat' \
+  --no-cookies \
+  --json /data/nestor_moepot_ns/inventory/fno_drive_files.json
+```
+
 脚本使用 `gdown.download_folder(..., skip_download=True)`，只解析目录，不下载文件。成功时会输出：
 
 ```json
