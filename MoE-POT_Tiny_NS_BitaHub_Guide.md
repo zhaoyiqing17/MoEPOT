@@ -532,16 +532,65 @@ cat /data/nestor_moepot_ns/inventory/ns1e5.json
 https://drive.google.com/drive/folders/1UnbQh2WWc6knEHbLnZaXrKUZhp7pjt-
 ```
 
-只获取 `NavierStokes_V1e-3_N5000_T50.mat` 的单文件链接，并复制其 File ID：
+先准备环境：
 
 ```bash
+export ENV_DIR=/data/nestor_env/envs/nestor
+export PATH="$ENV_DIR/bin:$PATH"
 mkdir -p /data/nestor_moepot_ns/raw
-gdown --id "<FNO_1E3_FILE_ID>" \
-  --output /data/nestor_moepot_ns/raw/NavierStokes_V1e-3_N5000_T50.mat
-ls -lh /data/nestor_moepot_ns/raw
+df -h /data/nestor_moepot_ns
 ```
 
-验收标准：文件存在，能被 HDF5/MAT 读取，变量为 `u`，总轨迹数 5000、时间步 50。
+##### 6.2.1. 能取得单文件链接时
+
+如果网页能够打开 `NavierStokes_V1e-3_N5000_T50.mat` 详情页或复制该文件的分享链接，取得 File ID 后执行：
+
+```bash
+gdown --id "<FNO_1E3_FILE_ID>" \
+  --output /data/nestor_moepot_ns/raw/NavierStokes_V1e-3_N5000_T50.mat
+export FNO_1E3_SOURCE=/data/nestor_moepot_ns/raw/NavierStokes_V1e-3_N5000_T50.mat
+ls -lh "$FNO_1E3_SOURCE"
+```
+
+##### 6.2.2. 只有文件夹下载按钮时
+
+不要在本地点下载按钮。直接在 BitaHub JupyterLab Terminal 下载公开文件夹：
+
+```bash
+export FNO_DRIVE_FOLDER='https://drive.google.com/drive/folders/1UnbQh2WWc6knEHbLnZaXrKUZhp7pjt-'
+
+gdown --folder --remaining-ok \
+  "$FNO_DRIVE_FOLDER" \
+  --output /data/nestor_moepot_ns/raw/fno-drive
+
+export FNO_1E3_SOURCE="$(
+  find /data/nestor_moepot_ns/raw/fno-drive \
+    -type f \
+    -name 'NavierStokes_V1e-3_N5000_T50.mat' \
+    -print -quit
+)"
+
+test -n "$FNO_1E3_SOURCE"
+echo "FNO_1E3_SOURCE=$FNO_1E3_SOURCE"
+ls -lh "$FNO_1E3_SOURCE"
+```
+
+该方式可能在云端同时下载文件夹中的其他 FNO 数据，数据量大于单文件下载，但不会下载到本地。下载前必须检查 `df -h /data/nestor_moepot_ns` 有足够空间。
+
+如果 `gdown --folder` 返回部分文件下载失败：
+
+```bash
+find /data/nestor_moepot_ns/raw/fno-drive -maxdepth 4 -type f | sort
+```
+
+先确认目标 MAT 是否已经存在。若文件夹下载得到 ZIP，则先解压再重新查找：
+
+```bash
+find /data/nestor_moepot_ns/raw/fno-drive -type f -name '*.zip' -print
+unzip -o <下载得到的zip文件> -d /data/nestor_moepot_ns/raw/fno-drive
+```
+
+验收标准：`FNO_1E3_SOURCE` 不为空，文件存在，能被 HDF5/MAT 读取，变量为 `u`，总轨迹数 5000、时间步 50。
 
 #### 6.3. 转换并注册两套数据
 
@@ -550,7 +599,7 @@ cd /code/MoEPOT
 export ENV_DIR=/data/nestor_env/envs/nestor
 bash prepare_data.sh \
   --ns1e5-root /data/nestor_1e5 \
-  --ns1e3-source /data/nestor_moepot_ns/raw/NavierStokes_V1e-3_N5000_T50.mat \
+  --ns1e3-source "$FNO_1E3_SOURCE" \
   --work-root /data/nestor_moepot_ns
 ```
 
